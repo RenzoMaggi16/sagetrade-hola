@@ -1,0 +1,417 @@
+import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
+import { ArrowLeft, Pencil } from "lucide-react";
+import { Navbar } from "@/components/Navbar";
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TradeForm } from "@/components/TradeForm";
+import { Label } from "@/components/ui/label";
+
+interface Trade {
+  id: string;
+  account_id: string | null;
+  par: string | null;
+  pnl_neto: number;
+  riesgo: number | null;
+  trade_type: "buy" | "sell";
+  setup_rating: string | null;
+  entry_time: string;
+  exit_time: string;
+  pre_trade_notes: string | null;
+  post_trade_notes: string | null;
+  strategy_id: string | null;
+  image_url_m1: string | null;
+  image_url_m5: string | null;
+  image_url_m15: string | null;
+  accounts?: {
+    account_name: string;
+  };
+  strategies?: {
+    name: string;
+  };
+}
+
+interface BrokenRule {
+  rules: {
+    id: string;
+    rule_text: string;
+  };
+}
+
+// Componente auxiliar para mostrar información en tarjetas
+const InfoCard = ({ title, value, isProfit = false, isLoss = false }: { 
+  title: string; 
+  value: string | number; 
+  isProfit?: boolean; 
+  isLoss?: boolean;
+}) => (
+  <div className="bg-neutral-800 p-4 rounded-lg">
+    <h4 className="text-sm text-neutral-400 mb-1">{title}</h4>
+    <p className={`text-xl font-bold ${isProfit ? 'text-[var(--profit-color)]' : ''} ${isLoss ? 'text-[var(--loss-color)]' : ''}`}>
+      {value}
+    </p>
+  </div>
+);
+
+// Componente auxiliar para mostrar notas
+const NotesBox = ({ title, notes }: { title: string; notes: string | null }) => (
+  <div className="bg-neutral-800 p-4 rounded-lg">
+    <h4 className="text-md font-semibold text-neutral-300 mb-2">{title}</h4>
+    <p className="text-sm text-neutral-100 whitespace-pre-wrap">{notes || 'Sin notas.'}</p>
+  </div>
+);
+
+// Componente auxiliar para las miniaturas
+const ImageThumbnail = ({ src, label, onImageClick }: { src: string, label: string, onImageClick: (src: string) => void }) => (
+  <div className="space-y-2">
+    <Label className="text-sm font-medium">{label}</Label>
+    <button 
+      onClick={() => onImageClick(src)}
+      className="block w-full h-48 rounded-md overflow-hidden border border-neutral-700 hover:opacity-80 transition-opacity bg-neutral-900"
+    >
+      <img 
+        src={src} 
+        alt={`Gráfico ${label}`} 
+        className="w-full h-full object-cover" 
+      />
+    </button>
+  </div>
+);
+
+const TradeDetail = () => {
+  const params = useParams();
+  const id = params.id;
+  const [trade, setTrade] = useState<Trade | null>(null);
+  const [brokenRules, setBrokenRules] = useState<BrokenRule[]>([]);
+  const [allRulesForStrategy, setAllRulesForStrategy] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+
+  const fetchTradeDetails = async () => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Obtener el trade y los nombres relacionados
+      const { data: tradeData, error: tradeError } = await supabase
+        .from('trades')
+        .select(`
+          *, 
+          accounts(account_name), 
+          strategies(name)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (tradeError) throw tradeError;
+      setTrade(tradeData as Trade);
+
+      // 2. Obtener TODAS las reglas de la estrategia
+      if (tradeData.strategy_id) {
+        const { data: allRules, error: allRulesError } = await supabase
+          .from('rules')
+          .select('id, rule_text')
+          .eq('strategy_id', tradeData.strategy_id);
+          
+        if (allRulesError) throw allRulesError;
+        setAllRulesForStrategy(allRules || []);
+      } else {
+        setAllRulesForStrategy([]);
+      }
+
+      // 3. Obtener las reglas ROTAS (Modifica el select para incluir id)
+      const { data: rulesData, error: rulesError } = await supabase
+        .from('broken_rules_by_trade')
+        .select(`
+          rules(id, rule_text)
+        `)
+        .eq('trade_id', id);
+
+      if (rulesError) throw rulesError;
+      setBrokenRules((rulesData || []) as BrokenRule[]);
+
+    } catch (error: any) {
+      console.error("Error fetching trade details:", error);
+      toast.error("Error al cargar los detalles del trade: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTradeDetails();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="container mx-auto px-4 py-8">
+          <div className="mb-6">
+            <Skeleton className="h-10 w-24" />
+          </div>
+          <Card className="border-border">
+            <CardHeader>
+              <Skeleton className="h-8 w-48" />
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (!trade) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-8 text-muted-foreground">
+            No se encontró la operación
+          </div>
+          <div className="flex justify-center mt-4">
+            <Button asChild>
+              <Link to="/">Volver al inicio</Link>
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Calcular RR
+  const pnl = parseFloat(trade.pnl_neto?.toString() || "0");
+  const risk = parseFloat(trade.riesgo?.toString() || "0");
+  let calculatedRR = "N/A";
+  if (risk > 0) {
+    calculatedRR = `1 : ${(pnl / risk).toFixed(2)}`;
+  }
+
+  // Calcular reglas cumplidas
+  const brokenRuleIds = brokenRules.map(br => br.rules?.id).filter(Boolean);
+  const compliedRules = allRulesForStrategy.filter(rule => 
+    !brokenRuleIds.includes(rule.id)
+  );
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <main className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="mb-6 flex justify-between items-center">
+          <Button variant="outline" asChild className="gap-2">
+            <Link to="/#trades">
+              <ArrowLeft className="h-4 w-4" />
+              Volver al Historial
+            </Link>
+          </Button>
+
+          <Button variant="default" className="gap-2" onClick={() => setIsEditDialogOpen(true)}>
+            <Pencil className="h-4 w-4" />
+            Editar Trade
+          </Button>
+        </div>
+
+        <Card className="border-border">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Detalles del Trade</CardTitle>
+              <Badge variant="outline" className="text-lg px-3 py-1">
+                {trade.par || 'N/A'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Información de Fechas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="bg-neutral-800 p-4 rounded-lg">
+                <h4 className="text-sm text-neutral-400 mb-1">Fecha y Hora de Entrada</h4>
+                <p className="text-lg font-semibold">
+                  {trade.entry_time 
+                    ? format(new Date(trade.entry_time), "dd/MM/yyyy HH:mm:ss")
+                    : 'N/A'}
+                </p>
+              </div>
+              <div className="bg-neutral-800 p-4 rounded-lg">
+                <h4 className="text-sm text-neutral-400 mb-1">Fecha y Hora de Salida</h4>
+                <p className="text-lg font-semibold">
+                  {trade.exit_time 
+                    ? format(new Date(trade.exit_time), "dd/MM/yyyy HH:mm:ss")
+                    : 'N/A'}
+                </p>
+              </div>
+            </div>
+
+            {/* Sección de Resumen - Grid de 4 columnas */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
+              <InfoCard 
+                title="Cuenta" 
+                value={trade.accounts?.account_name || 'N/A'} 
+              />
+              <InfoCard 
+                title="PnL Neto" 
+                value={`$${pnl.toFixed(2)}`} 
+                isProfit={pnl > 0} 
+                isLoss={pnl < 0} 
+              />
+              <InfoCard 
+                title="Riesgo ($)" 
+                value={`$${risk.toFixed(2)}`} 
+              />
+              <InfoCard 
+                title="RR (Calculado)" 
+                value={calculatedRR} 
+              />
+              <InfoCard 
+                title="Dirección" 
+                value={trade.trade_type === 'buy' ? 'Compra' : 'Venta'} 
+              />
+              <InfoCard 
+                title="Calificación Setup" 
+                value={trade.setup_rating || 'N/A'} 
+              />
+              <InfoCard 
+                title="Estrategia" 
+                value={trade.strategies?.name || 'N/A'} 
+              />
+            </div>
+
+            {/* Sección de Análisis y Reglas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              {/* Notas */}
+              <div className="space-y-4">
+                <NotesBox 
+                  title="Análisis Pre-Trade" 
+                  notes={trade.pre_trade_notes} 
+                />
+                <NotesBox 
+                  title="Reflexión Post-Trade" 
+                  notes={trade.post_trade_notes} 
+                />
+              </div>
+
+              {/* Reglas */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Análisis de Reglas</h3>
+                <div className="p-4 bg-neutral-800 rounded-lg shadow-inner min-h-[100px]">
+                  
+                  {/* Lista de Reglas Cumplidas */}
+                  {compliedRules.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-green-500 font-semibold mb-3">Reglas Cumplidas:</p>
+                      <ul className="list-disc list-inside space-y-2">
+                        {compliedRules.map((rule: any) => (
+                          <li key={rule.id} className="text-neutral-100">
+                            {rule.rule_text}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Lista de Reglas Rotas */}
+                  {brokenRules.length > 0 && (
+                    <div>
+                      <p className="text-red-500 font-semibold mb-3">Reglas Rotas:</p>
+                      <ul className="list-disc list-inside space-y-2">
+                        {brokenRules.map((br: BrokenRule, index: number) => (
+                          <li key={index} className="text-neutral-100">
+                            {br.rules?.rule_text || 'Regla sin texto'}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Caso donde no hay reglas */}
+                  {allRulesForStrategy.length === 0 && (
+                    <p className="text-neutral-400">Esta estrategia no tiene reglas definidas.</p>
+                  )}
+
+                </div>
+              </div>
+            </div>
+
+            {/* --- Sección de Imágenes (M1, M5, M15) --- */}
+            {(trade.image_url_m1 || trade.image_url_m5 || trade.image_url_m15) && (
+              <div className="mt-6 col-span-1 md:col-span-2">
+                <h3 className="text-lg font-semibold mb-4">Imágenes del Trade</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* M1 */}
+                  {trade.image_url_m1 && (
+                    <ImageThumbnail 
+                      src={trade.image_url_m1} 
+                      label="M1" 
+                      onImageClick={setSelectedImageUrl} 
+                    />
+                  )}
+                  {/* M5 */}
+                  {trade.image_url_m5 && (
+                    <ImageThumbnail 
+                      src={trade.image_url_m5} 
+                      label="M5" 
+                      onImageClick={setSelectedImageUrl} 
+                    />
+                  )}
+                  {/* M15 */}
+                  {trade.image_url_m15 && (
+                    <ImageThumbnail 
+                      src={trade.image_url_m15} 
+                      label="M15" 
+                      onImageClick={setSelectedImageUrl} 
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+            {/* --- Fin Sección de Imágenes --- */}
+          </CardContent>
+        </Card>
+
+        {/* --- Componente Modal (Lightbox) --- */}
+        <Dialog open={!!selectedImageUrl} onOpenChange={() => setSelectedImageUrl(null)}>
+          <DialogContent className="max-w-5xl h-[90vh] bg-transparent border-0 shadow-none flex items-center justify-center p-0">
+            <img 
+              src={selectedImageUrl || ''} 
+              alt="Vista detallada del gráfico" 
+              className="max-w-full max-h-full object-contain"
+            />
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Editar Operación</DialogTitle>
+            </DialogHeader>
+            <TradeForm 
+              tradeToEdit={trade} 
+              onSaveSuccess={() => {
+                setIsEditDialogOpen(false);
+                fetchTradeDetails();
+                toast.success("Trade actualizado con éxito");
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      </main>
+    </div>
+  );
+};
+
+export default TradeDetail;
