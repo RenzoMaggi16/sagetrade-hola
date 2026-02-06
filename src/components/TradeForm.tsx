@@ -166,6 +166,11 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       toast.error("No se pudieron cargar las cuentas");
     } else {
       setAccounts(data || []);
+
+      // Auto-select first account if not editing and no account selected
+      if (!tradeToEdit && !selectedAccountId && data && data.length > 0) {
+        setSelectedAccountId(data[0].id);
+      }
     }
   };
 
@@ -328,7 +333,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         account_id: selectedAccountId,
         strategy_id: selectedStrategyId,
         par: formData.par.toUpperCase() || null,
-        pnl_neto: parseFloat(formData.pnl_neto) || 0,
+        pnl_neto: formData.pnl_neto === "" ? 0 : parseFloat(formData.pnl_neto),
         riesgo: parseFloat(formData.riesgo) || null,
         trade_type: formData.trade_type,
         emocion: formData.emocion || null,
@@ -539,7 +544,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pnl_neto">PnL Neto *</Label>
+              <Label htmlFor="pnl_neto">Resultado final del trade *</Label>
               <Input id="pnl_neto" type="number" step="0.01" placeholder="0.00" value={formData.pnl_neto} onChange={handleInputChange} required className="bg-secondary" />
             </div>
           </div>
@@ -662,9 +667,9 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
           <div className="space-y-3 pt-4">
             <Label className="font-semibold text-lg">Calificación del Setup</Label>
             <ToggleGroup type="single" value={setupRating} onValueChange={(value) => { if (value) setSetupRating(value); }} className="grid grid-cols-5 gap-3">
-              {['F', 'D', 'C', 'B', 'A'].map((rating) => (
+              {['Malo', 'Regular', 'Aceptable', 'Bueno', 'Excelente'].map((rating) => (
                 <ToggleGroupItem key={rating} value={rating} aria-label={`Calificación ${rating}`}
-                  className="h-14 w-full p-2 border border-neutral-700 bg-neutral-900 text-xl font-bold text-white data-[state=on]:bg-primary data-[state=on]:border-primary/80 data-[state=on]:text-primary-foreground hover:bg-neutral-800 transition-colors">
+                  className="h-14 w-full p-2 border border-neutral-700 bg-neutral-900 text-sm md:text-base font-bold text-white data-[state=on]:bg-primary data-[state=on]:border-primary/80 data-[state=on]:text-primary-foreground hover:bg-neutral-800 transition-colors">
                   {rating}
                 </ToggleGroupItem>
               ))}

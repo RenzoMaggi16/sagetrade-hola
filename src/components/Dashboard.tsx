@@ -10,7 +10,9 @@ import { StatCard } from "./dashboard/StatCard";
 import { WinLossRatioBar } from "./dashboard/WinLossRatioBar";
 import { StreakStats } from "./dashboard/StreakStats";
 import { TradeCountChart } from "./dashboard/TradeCountChart";
-import { format, isSameDay, parseISO } from "date-fns";
+import { ProfitFactorChart } from "./dashboard/ProfitFactorChart";
+import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import { es } from "date-fns/locale";
 
 interface Trade {
   id: string;
@@ -120,7 +122,51 @@ export const Dashboard = () => {
     currentStreakCount = Math.abs(streakVal);
     currentStreakType = streakVal > 0 ? 'win' : streakVal < 0 ? 'loss' : 'neutral';
 
-    // 4. Trade Count Chart Data
+    // 4. Profit Factor Logic
+    const grossProfit = trades.reduce((sum, t) => sum + (Number(t.pnl_neto) > 0 ? Number(t.pnl_neto) : 0), 0);
+    const grossLoss = Math.abs(trades.reduce((sum, t) => sum + (Number(t.pnl_neto) < 0 ? Number(t.pnl_neto) : 0), 0));
+
+    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 100 : 0; // If loss is 0 but visible profit, big number. Can adjust visualization.
+
+
+    // 5. Best Day Logic (Current Week)
+    const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 1 }); // Monday start
+    const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 1 });
+
+    const currentWeekTrades = trades.filter(t =>
+      isWithinInterval(parseISO(t.entry_time), { start: startOfCurrentWeek, end: endOfCurrentWeek })
+    );
+
+    const profitsByDay = new Array(7).fill(0);
+    currentWeekTrades.forEach(t => {
+      // getDay returns 0 for Sunday, we want to map this correctly if needed, 
+      // but simpler is just to accumulate by getDay index (0-6)
+      const date = parseISO(t.entry_time);
+      const dayIndex = getDay(date);
+      profitsByDay[dayIndex] += Number(t.pnl_neto);
+    });
+
+    let bestDayIndex = -1;
+    let maxDayProfit = -Infinity;
+
+    profitsByDay.forEach((profit, index) => {
+      if (profit > maxDayProfit) {
+        maxDayProfit = profit;
+        bestDayIndex = index;
+      }
+    });
+
+    // If no profit at all, maybe handle gracefully
+    if (maxDayProfit <= 0) {
+      bestDayIndex = -1;
+    }
+
+    const bestDayName = bestDayIndex >= 0 ? format(new Date().setDate(new Date().getDate() - new Date().getDay() + bestDayIndex), 'EEEE', { locale: es }) : "N/A";
+    const capital = accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1; // Avoid div 0
+    const bestDayPercentage = bestDayIndex >= 0 ? (maxDayProfit / capital) * 100 : 0;
+
+
+    // 6. Trade Count Chart Data
     const tradeCountsByDay = new Map<string, number>();
     sortedTrades.forEach(t => {
       const dateStr = format(parseISO(t.entry_time), 'yyyy-MM-dd');
@@ -145,7 +191,14 @@ export const Dashboard = () => {
       currentStreakType,
       bestStreak,
       worstStreak: Math.abs(worstStreak),
-      countChartData
+      countChartData,
+      grossProfit,
+      grossLoss,
+      profitFactor,
+      bestDayName,
+      bestDayPercentage,
+      bestDayProfit: maxDayProfit,
+      bestDayIndex
     };
   }, [trades]);
 
@@ -206,17 +259,17 @@ export const Dashboard = () => {
         </StatCard>
 
         {/* Ratio Card */}
-        <StatCard title="Avg Win / Avg Loss" value={metrics?.ratio.toFixed(2) || '0.00'}>
+        <StatCard title="Promedio de victorias / Promedio de derrotas" value={metrics?.ratio.toFixed(2) || '0.00'}>
           <WinLossRatioBar
             winValue={metrics?.avgWin || 0}
             lossValue={metrics?.avgLoss || 0}
-            label="Average RRR"
+            label="Average RR"
             className="mt-4"
           />
         </StatCard>
 
         {/* Trade Count Card */}
-        <StatCard title="Trade Count" value={metrics?.totalTrades || 0}>
+        <StatCard title="Número total de operaciones" value={metrics?.totalTrades || 0}>
           <div className="mt-2 text-xs text-muted-foreground flex justify-between mb-1">
             <span>Last 1D</span>
             <span>1W</span>
@@ -226,7 +279,7 @@ export const Dashboard = () => {
         </StatCard>
 
         {/* Winstreak Card */}
-        <StatCard title="Streak">
+        <StatCard title="Racha">
           <StreakStats
             currentStreak={metrics?.currentStreakCount || 0}
             bestStreak={metrics?.bestStreak || 0}
@@ -240,21 +293,44 @@ export const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Left Column */}
         <div className="col-span-1 flex flex-col gap-4">
-          {/* Daily Winrate */}
-          <StatCard title="Daily Winrate" value={`${metrics?.dailyWinRate.toFixed(1) || '0.0'}%`}>
-            <div className="h-2 w-full bg-secondary rounded-full mt-2 overflow-hidden">
-              <div className="h-full bg-profit" style={{ width: `${metrics?.dailyWinRate || 0}%` }} />
+          {/* Profit Factor Card */}
+          <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>
+            <div className="flex items-center justify-center mt-3 gap-4">
+              {/* Gross Profit */}
+              <div className="text-sm font-bold text-profit">
+                ${metrics?.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+              </div>
+
+              {/* Chart */}
+              <div className="h-14 w-14">
+                <ProfitFactorChart
+                  grossProfit={metrics?.grossProfit || 0}
+                  grossLoss={metrics?.grossLoss || 0}
+                />
+              </div>
+
+              {/* Gross Loss */}
+              <div className="text-sm font-bold text-loss">
+                -${metrics?.grossLoss.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+              </div>
             </div>
           </StatCard>
 
-          {/* Day Ratio */}
-          <StatCard title="Day Win / Day Loss" value={(metrics?.dayAvgWin && metrics?.dayAvgLoss) ? (metrics.dayAvgWin / metrics.dayAvgLoss).toFixed(2) : "0.00"}>
-            <WinLossRatioBar
-              winValue={metrics?.dayAvgWin || 0}
-              lossValue={metrics?.dayAvgLoss || 0}
-              label="Today's Ratio"
-              className="mt-2"
-            />
+          {/* Best Day Card */}
+          <StatCard title="Mejor Día">
+            <div className="flex items-center justify-between">
+              <div className="text-3xl font-bold capitalize text-white">
+                {metrics?.bestDayIndex !== -1 ? metrics?.bestDayName : "N/A"}
+              </div>
+              <div className="flex flex-col items-end">
+                <span className={`text-2xl font-bold ${metrics?.bestDayPercentage > 0 ? "text-profit" : "text-muted-foreground"}`}>
+                  {metrics?.bestDayPercentage > 0 ? "+" : ""}{metrics?.bestDayPercentage?.toFixed(2) || "0.00"}%
+                </span>
+                <span className="text-base font-medium text-muted-foreground">
+                  ${metrics?.bestDayProfit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                </span>
+              </div>
+            </div>
           </StatCard>
 
           {/* Balance Filtered */}

@@ -45,15 +45,15 @@ interface BrokenRule {
 }
 
 // Componente auxiliar para mostrar información en tarjetas
-const InfoCard = ({ title, value, isProfit = false, isLoss = false }: { 
-  title: string; 
-  value: string | number; 
-  isProfit?: boolean; 
+const InfoCard = ({ title, value, isProfit = false, isLoss = false }: {
+  title: string;
+  value: string | number;
+  isProfit?: boolean;
   isLoss?: boolean;
 }) => (
   <div className="bg-neutral-800 p-4 rounded-lg">
     <h4 className="text-sm text-neutral-400 mb-1">{title}</h4>
-    <p className={`text-xl font-bold ${isProfit ? 'text-[var(--profit-color)]' : ''} ${isLoss ? 'text-[var(--loss-color)]' : ''}`}>
+    <p className={`text-xl font-bold ${isProfit ? 'text-[var(--profit-color)]' : isLoss ? 'text-[var(--loss-color)]' : 'text-muted-foreground'}`}>
       {value}
     </p>
   </div>
@@ -71,14 +71,14 @@ const NotesBox = ({ title, notes }: { title: string; notes: string | null }) => 
 const ImageThumbnail = ({ src, label, onImageClick }: { src: string, label: string, onImageClick: (src: string) => void }) => (
   <div className="space-y-2">
     <Label className="text-sm font-medium">{label}</Label>
-    <button 
+    <button
       onClick={() => onImageClick(src)}
       className="block w-full h-48 rounded-md overflow-hidden border border-neutral-700 hover:opacity-80 transition-opacity bg-neutral-900"
     >
-      <img 
-        src={src} 
-        alt={`Gráfico ${label}`} 
-        className="w-full h-full object-cover" 
+      <img
+        src={src}
+        alt={`Gráfico ${label}`}
+        className="w-full h-full object-cover"
       />
     </button>
   </div>
@@ -122,7 +122,7 @@ const TradeDetail = () => {
           .from('rules')
           .select('id, rule_text')
           .eq('strategy_id', tradeData.strategy_id);
-          
+
         if (allRulesError) throw allRulesError;
         setAllRulesForStrategy(allRules || []);
       } else {
@@ -205,7 +205,7 @@ const TradeDetail = () => {
 
   // Calcular reglas cumplidas
   const brokenRuleIds = brokenRules.map(br => br.rules?.id).filter(Boolean);
-  const compliedRules = allRulesForStrategy.filter(rule => 
+  const compliedRules = allRulesForStrategy.filter(rule =>
     !brokenRuleIds.includes(rule.id)
   );
 
@@ -242,7 +242,7 @@ const TradeDetail = () => {
               <div className="bg-neutral-800 p-4 rounded-lg">
                 <h4 className="text-sm text-neutral-400 mb-1">Fecha y Hora de Entrada</h4>
                 <p className="text-lg font-semibold">
-                  {trade.entry_time 
+                  {trade.entry_time
                     ? format(new Date(trade.entry_time), "dd/MM/yyyy HH:mm:ss")
                     : 'N/A'}
                 </p>
@@ -250,7 +250,7 @@ const TradeDetail = () => {
               <div className="bg-neutral-800 p-4 rounded-lg">
                 <h4 className="text-sm text-neutral-400 mb-1">Fecha y Hora de Salida</h4>
                 <p className="text-lg font-semibold">
-                  {trade.exit_time 
+                  {trade.exit_time
                     ? format(new Date(trade.exit_time), "dd/MM/yyyy HH:mm:ss")
                     : 'N/A'}
                 </p>
@@ -259,35 +259,35 @@ const TradeDetail = () => {
 
             {/* Sección de Resumen - Grid de 4 columnas */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
-              <InfoCard 
-                title="Cuenta" 
-                value={trade.accounts?.account_name || 'N/A'} 
+              <InfoCard
+                title="Cuenta"
+                value={trade.accounts?.account_name || 'N/A'}
               />
-              <InfoCard 
-                title="PnL Neto" 
-                value={`$${pnl.toFixed(2)}`} 
-                isProfit={pnl > 0} 
-                isLoss={pnl < 0} 
+              <InfoCard
+                title="PnL Neto"
+                value={`$${pnl.toFixed(2)}`}
+                isProfit={pnl > 0}
+                isLoss={pnl < 0}
               />
-              <InfoCard 
-                title="Riesgo ($)" 
-                value={`$${risk.toFixed(2)}`} 
+              <InfoCard
+                title="Riesgo ($)"
+                value={`$${risk.toFixed(2)}`}
               />
-              <InfoCard 
-                title="RR (Calculado)" 
-                value={calculatedRR} 
+              <InfoCard
+                title="RR (Calculado)"
+                value={calculatedRR}
               />
-              <InfoCard 
-                title="Dirección" 
-                value={trade.trade_type === 'buy' ? 'Compra' : 'Venta'} 
+              <InfoCard
+                title="Dirección"
+                value={trade.trade_type === 'buy' ? 'Compra' : 'Venta'}
               />
-              <InfoCard 
-                title="Calificación Setup" 
-                value={trade.setup_rating || 'N/A'} 
+              <InfoCard
+                title="Calificación Setup"
+                value={trade.setup_rating || 'N/A'}
               />
-              <InfoCard 
-                title="Estrategia" 
-                value={trade.strategies?.name || 'N/A'} 
+              <InfoCard
+                title="Estrategia"
+                value={trade.strategies?.name || 'N/A'}
               />
             </div>
 
@@ -295,13 +295,13 @@ const TradeDetail = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
               {/* Notas */}
               <div className="space-y-4">
-                <NotesBox 
-                  title="Análisis Pre-Trade" 
-                  notes={trade.pre_trade_notes} 
+                <NotesBox
+                  title="Análisis Pre-Trade"
+                  notes={trade.pre_trade_notes}
                 />
-                <NotesBox 
-                  title="Reflexión Post-Trade" 
-                  notes={trade.post_trade_notes} 
+                <NotesBox
+                  title="Reflexión Post-Trade"
+                  notes={trade.post_trade_notes}
                 />
               </div>
 
@@ -309,7 +309,7 @@ const TradeDetail = () => {
               <div>
                 <h3 className="text-lg font-semibold mb-4">Análisis de Reglas</h3>
                 <div className="p-4 bg-neutral-800 rounded-lg shadow-inner min-h-[100px]">
-                  
+
                   {/* Lista de Reglas Cumplidas */}
                   {compliedRules.length > 0 && (
                     <div className="mb-4">
@@ -354,26 +354,26 @@ const TradeDetail = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* M1 */}
                   {trade.image_url_m1 && (
-                    <ImageThumbnail 
-                      src={trade.image_url_m1} 
-                      label="M1" 
-                      onImageClick={setSelectedImageUrl} 
+                    <ImageThumbnail
+                      src={trade.image_url_m1}
+                      label="M1"
+                      onImageClick={setSelectedImageUrl}
                     />
                   )}
                   {/* M5 */}
                   {trade.image_url_m5 && (
-                    <ImageThumbnail 
-                      src={trade.image_url_m5} 
-                      label="M5" 
-                      onImageClick={setSelectedImageUrl} 
+                    <ImageThumbnail
+                      src={trade.image_url_m5}
+                      label="M5"
+                      onImageClick={setSelectedImageUrl}
                     />
                   )}
                   {/* M15 */}
                   {trade.image_url_m15 && (
-                    <ImageThumbnail 
-                      src={trade.image_url_m15} 
-                      label="M15" 
-                      onImageClick={setSelectedImageUrl} 
+                    <ImageThumbnail
+                      src={trade.image_url_m15}
+                      label="M15"
+                      onImageClick={setSelectedImageUrl}
                     />
                   )}
                 </div>
@@ -386,9 +386,9 @@ const TradeDetail = () => {
         {/* --- Componente Modal (Lightbox) --- */}
         <Dialog open={!!selectedImageUrl} onOpenChange={() => setSelectedImageUrl(null)}>
           <DialogContent className="max-w-5xl h-[90vh] bg-transparent border-0 shadow-none flex items-center justify-center p-0">
-            <img 
-              src={selectedImageUrl || ''} 
-              alt="Vista detallada del gráfico" 
+            <img
+              src={selectedImageUrl || ''}
+              alt="Vista detallada del gráfico"
               className="max-w-full max-h-full object-contain"
             />
           </DialogContent>
@@ -399,8 +399,8 @@ const TradeDetail = () => {
             <DialogHeader>
               <DialogTitle>Editar Operación</DialogTitle>
             </DialogHeader>
-            <TradeForm 
-              tradeToEdit={trade} 
+            <TradeForm
+              tradeToEdit={trade}
               onSaveSuccess={() => {
                 setIsEditDialogOpen(false);
                 fetchTradeDetails();

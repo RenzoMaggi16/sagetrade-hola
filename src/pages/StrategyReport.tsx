@@ -64,7 +64,7 @@ const StrategyReport = () => {
     const fetchData = async () => {
       if (!strategyId) return;
       setIsLoading(true);
-      
+
       try {
         // Obtener nombre de la estrategia
         const { data: stratData, error: stratError } = await supabase
@@ -72,7 +72,7 @@ const StrategyReport = () => {
           .select('name')
           .eq('id', strategyId)
           .single();
-        
+
         if (stratError) throw stratError;
         setStrategyName(stratData?.name || 'Estrategia Desconocida');
 
@@ -108,7 +108,7 @@ const StrategyReport = () => {
         // Obtener PnL por hora
         const { data: pnlByHour, error: pnlByHourError } = await supabase
           .rpc('get_pnl_by_hour_for_strategy', { strategy_uuid: strategyId });
-        
+
         if (pnlByHourError) {
           console.error("Error obteniendo PnL por hora:", pnlByHourError);
         } else {
@@ -126,7 +126,7 @@ const StrategyReport = () => {
         setIsLoading(false);
       }
     };
-    
+
     fetchData();
   }, [strategyId, toast]);
 
@@ -152,8 +152,8 @@ const StrategyReport = () => {
     // Reglas seguidas
     const rulesFollowedTrades = trades.filter(t => t.reglas_cumplidas === true);
     const rulesFollowedWins = rulesFollowedTrades.filter(t => t.pnl_neto > 0).length;
-    const rulesFollowedWinPct = rulesFollowedTrades.length > 0 
-      ? (rulesFollowedWins / rulesFollowedTrades.length) * 100 
+    const rulesFollowedWinPct = rulesFollowedTrades.length > 0
+      ? (rulesFollowedWins / rulesFollowedTrades.length) * 100
       : 0;
 
     // Racha actual
@@ -161,7 +161,7 @@ const StrategyReport = () => {
     if (trades.length > 0) {
       const lastTrade = trades[trades.length - 1];
       const isLastWin = lastTrade.pnl_neto > 0;
-      
+
       for (let i = trades.length - 1; i >= 0; i--) {
         const trade = trades[i];
         if ((isLastWin && trade.pnl_neto > 0) || (!isLastWin && trade.pnl_neto < 0)) {
@@ -229,7 +229,7 @@ const StrategyReport = () => {
 
   const fetchBrokenRules = async (trades: any[]): Promise<BrokenRule[]> => {
     if (!strategyId) return [];
-    
+
     // Usar la RPC get_broken_rules_stats
     const { data: brokenRulesData, error } = await supabase
       .rpc('get_broken_rules_stats', { strategy_uuid: strategyId });
@@ -278,16 +278,16 @@ const StrategyReport = () => {
 
   const handleAiAnalysis = async () => {
     if (!strategyId) return;
-    
+
     setIsAnalyzing(true);
     try {
       // Por ahora, usar la función de análisis general
       const { data, error } = await supabase.functions.invoke('analisis-ia');
-      
+
       if (error) throw error;
-      
+
       setAiAnalysis(JSON.stringify(data, null, 2));
-      
+
       toast({
         title: "Análisis completado",
         description: "El análisis de IA se ha generado correctamente",
@@ -352,7 +352,7 @@ const StrategyReport = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Volver al Dashboard
           </Link>
         </div>
-        
+
         <h1 className="text-3xl font-bold mb-6">Reporte: {strategyName}</h1>
 
         {/* Métricas Clave - Grid de 4 columnas */}
@@ -362,7 +362,7 @@ const StrategyReport = () => {
               <CardTitle className="text-sm font-medium text-center">Tasa de Acierto</CardTitle>
             </CardHeader>
             <CardContent className="w-full flex flex-col items-center justify-center p-0">
-              <WinRateDonutChart 
+              <WinRateDonutChart
                 wins={stats?.winning_trades || 0}
                 losses={stats?.losing_trades || 0}
                 breakeven={stats?.breakeven_trades || 0}
@@ -424,11 +424,11 @@ const StrategyReport = () => {
                   <XAxis dataKey="date" angle={-45} textAnchor="end" height={80} />
                   <YAxis />
                   <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, 'PnL Acumulado']} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="cumulative_pnl" 
-                    stroke="#3b82f6" 
-                    strokeWidth={2} 
+                  <Line
+                    type="monotone"
+                    dataKey="cumulative_pnl"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
                     dot={false}
                   />
                 </LineChart>
@@ -446,11 +446,11 @@ const StrategyReport = () => {
                   <PolarGrid />
                   <PolarAngleAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <PolarRadiusAxis angle={90} domain={[0, 'auto']} tick={{ fontSize: 10 }} />
-                  <Radar 
-                    name="Métrica" 
-                    dataKey="value" 
-                    stroke="#3b82f6" 
-                    fill="#3b82f6" 
+                  <Radar
+                    name="Métrica"
+                    dataKey="value"
+                    stroke="#3b82f6"
+                    fill="#3b82f6"
                     fillOpacity={0.6}
                   />
                   <Tooltip />
@@ -468,26 +468,26 @@ const StrategyReport = () => {
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={pnlByHourData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))"/>
-                <XAxis 
-                  dataKey="hour_of_day" 
-                  tickFormatter={(hour) => `${hour}:00`} 
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis
+                  dataKey="hour_of_day"
+                  tickFormatter={(hour) => `${hour}:00`}
                   stroke="hsl(var(--muted-foreground))"
                 />
-                <YAxis stroke="hsl(var(--muted-foreground))"/>
+                <YAxis stroke="hsl(var(--muted-foreground))" />
                 <Tooltip
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--background))', 
-                    border: '1px solid hsl(var(--border))' 
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--background))',
+                    border: '1px solid hsl(var(--border))'
                   }}
                   labelFormatter={(label) => `Hora ${label}:00`}
                   formatter={(value: any) => [`$${Number(value).toFixed(2)}`, 'PnL Neto']}
                 />
                 <Bar dataKey="total_pnl" fill="var(--chart-color)">
                   {pnlByHourData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.total_pnl >= 0 ? 'var(--profit-color)' : 'var(--loss-color)'} 
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.total_pnl >= 0 ? 'var(--profit-color)' : 'var(--loss-color)'}
                     />
                   ))}
                 </Bar>
@@ -528,7 +528,7 @@ const StrategyReport = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          {/* <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <BrainCircuit className="mr-2 h-5 w-5" />
@@ -557,7 +557,7 @@ const StrategyReport = () => {
                 </p>
               )}
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         {/* Mapa de Calor - Full Width */}

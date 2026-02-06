@@ -17,6 +17,7 @@ interface Trade {
 interface DayPnL {
   date: Date;
   pnl: number;
+  tradeCount: number;
 }
 
 interface PnLCalendarProps {
@@ -68,7 +69,8 @@ export const PnLCalendar = ({ selectedAccountId }: PnLCalendarProps) => {
 
       return {
         date: day,
-        pnl: totalPnL
+        pnl: totalPnL,
+        tradeCount: dayTrades.length
       };
     });
 
@@ -136,9 +138,10 @@ export const PnLCalendar = ({ selectedAccountId }: PnLCalendarProps) => {
             DayContent: (props) => {
               const date = props.date;
               const dayPnL = dailyPnL.find(d => isSameDay(d.date, date));
-              const hasPnL = dayPnL && dayPnL.pnl !== 0;
-              const isProfitable = hasPnL && dayPnL.pnl > 0;
-              const isLoss = hasPnL && dayPnL.pnl < 0;
+              const hasTrades = dayPnL && dayPnL.tradeCount > 0;
+              const isProfitable = hasTrades && dayPnL.pnl > 0;
+              const isLoss = hasTrades && dayPnL.pnl < 0;
+              const isNeutral = hasTrades && dayPnL.pnl === 0;
               const isCurrentDay = isToday(date);
               const isCurrentMonth = isThisMonth(date);
 
@@ -149,10 +152,12 @@ export const PnLCalendar = ({ selectedAccountId }: PnLCalendarProps) => {
                 borderClass = "border border-profit-custom";
               } else if (isLoss) {
                 borderClass = "border border-loss-custom";
+              } else if (isNeutral) {
+                borderClass = "border border-neutral-500";
               }
 
               return (
-                <div className={`rounded-md ${borderClass} relative flex items-center justify-center flex-col p-1 h-24 w-full ${hasPnL ? (dayPnL.pnl >= 0 ? 'bg-calendar-profit' : 'bg-calendar-loss') : 'bg-card'}`}>
+                <div className={`rounded-md ${borderClass} relative flex items-center justify-center flex-col p-1 h-24 w-full ${hasTrades ? (isProfitable ? 'bg-calendar-profit' : isLoss ? 'bg-calendar-loss' : 'bg-neutral-800') : 'bg-card'}`}>
                   {/* Número del día en la esquina superior derecha */}
                   <div className="absolute top-1 right-1">
                     {isCurrentDay ? (
@@ -168,8 +173,8 @@ export const PnLCalendar = ({ selectedAccountId }: PnLCalendarProps) => {
 
                   {/* Contenido del PnL */}
                   <div className="flex items-center justify-center">
-                    {hasPnL ? (
-                      <span className="text-sm font-medium">
+                    {hasTrades ? (
+                      <span className={`text-sm font-medium ${isNeutral ? 'text-neutral-300' : ''}`}>
                         ${Math.abs(dayPnL.pnl).toFixed(2)}
                       </span>
                     ) : (

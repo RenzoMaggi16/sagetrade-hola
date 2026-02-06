@@ -122,7 +122,7 @@ const TradesPage = () => {
                         {trade?.entry_time ? format(new Date(trade.entry_time), "dd/MM/yyyy HH:mm") : "-"}
                       </TableCell>
                       <TableCell>{trade?.par ?? "-"}</TableCell>
-                      <TableCell className={pnl >= 0 ? "text-green-600" : "text-red-600"}>
+                      <TableCell className={pnl > 0 ? "text-green-600" : pnl < 0 ? "text-red-600" : "text-muted-foreground"}>
                         {pnl.toLocaleString("es-ES", { style: "currency", currency: "USD" })}
                       </TableCell>
                       <TableCell className={isBuy ? "text-green-600" : "text-red-600"}>
