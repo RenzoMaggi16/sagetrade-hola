@@ -11,6 +11,7 @@ import { LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 import { useToast } from "@/components/ui/use-toast";
 import { PnLCalendar } from "@/components/PnLCalendar";
 import { WinRateDonutChart } from "@/components/charts/WinRateDonutChart";
+import { DailyPerformanceStats } from "@/components/DailyPerformanceStats";
 
 interface StrategyStats {
   realized_win_pct: number;
@@ -55,6 +56,7 @@ const StrategyReport = () => {
   const [brokenRules, setBrokenRules] = useState<BrokenRule[]>([]);
   const [calendarData, setCalendarData] = useState<CalendarHeatmapData[]>([]);
   const [pnlByHourData, setPnlByHourData] = useState<any[]>([]);
+  const [rawTrades, setRawTrades] = useState<any[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -84,6 +86,8 @@ const StrategyReport = () => {
           .order('entry_time', { ascending: true });
 
         if (tradesError) throw tradesError;
+
+        setRawTrades(trades || []);
 
         // Calcular estadísticas
         const calculatedStats = calculateStrategyStats(trades || []);
@@ -566,9 +570,14 @@ const StrategyReport = () => {
             <CardTitle>Mapa de Calor - PnL Diario</CardTitle>
           </CardHeader>
           <CardContent>
-            <PnLCalendar />
+            <PnLCalendar trades={rawTrades} />
           </CardContent>
         </Card>
+
+        {/* Estadísticas Diarias */}
+        <div className="mb-6">
+          <DailyPerformanceStats trades={rawTrades} />
+        </div>
       </main>
     </div>
   );

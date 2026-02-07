@@ -11,6 +11,7 @@ import { WinLossRatioBar } from "./dashboard/WinLossRatioBar";
 import { StreakStats } from "./dashboard/StreakStats";
 import { TradeCountChart } from "./dashboard/TradeCountChart";
 import { ProfitFactorChart } from "./dashboard/ProfitFactorChart";
+import { DailyPerformanceStats } from "@/components/DailyPerformanceStats";
 import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
@@ -422,6 +423,9 @@ export const Dashboard = () => {
         {/* Right Column: Calendar */}
         <div className="col-span-1 md:col-span-3">
           <PnLCalendar trades={trades} />
+          <div className="mt-4">
+            <DailyPerformanceStats trades={trades} />
+          </div>
         </div>
       </div>
     </div>
