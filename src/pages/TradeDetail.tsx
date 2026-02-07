@@ -117,28 +117,41 @@ const TradeDetail = () => {
       setTrade(tradeData as Trade);
 
       // 2. Obtener TODAS las reglas de la estrategia
+      let allRules: any[] = [];
       if (tradeData.strategy_id) {
-        const { data: allRules, error: allRulesError } = await supabase
+        const { data: rules, error: allRulesError } = await (supabase as any)
           .from('rules')
           .select('id, rule_text')
           .eq('strategy_id', tradeData.strategy_id);
 
         if (allRulesError) throw allRulesError;
-        setAllRulesForStrategy(allRules || []);
+        allRules = rules || [];
+        setAllRulesForStrategy(allRules);
       } else {
         setAllRulesForStrategy([]);
       }
 
-      // 3. Obtener las reglas ROTAS (Modifica el select para incluir id)
-      const { data: rulesData, error: rulesError } = await supabase
+      // 3. Obtener las reglas ROTAS (Fetch IDs directamente para evitar problemas de join)
+      const { data: brokenData, error: brokenError } = await (supabase as any)
         .from('broken_rules_by_trade')
-        .select(`
-          rules(id, rule_text)
-        `)
+        .select('rule_id')
         .eq('trade_id', id);
 
-      if (rulesError) throw rulesError;
-      setBrokenRules((rulesData || []) as BrokenRule[]);
+      if (brokenError) throw brokenError;
+
+      const brokenIds = (brokenData || []).map((item: any) => item.rule_id);
+
+      // Reconstruir el objeto de reglas rotas coincidiendo con allRules
+      const brokenRulesMapped = allRules
+        .filter(rule => brokenIds.includes(rule.id))
+        .map(rule => ({
+          rules: {
+            id: rule.id,
+            rule_text: rule.rule_text
+          }
+        }));
+
+      setBrokenRules(brokenRulesMapped as BrokenRule[]);
 
     } catch (error: any) {
       console.error("Error fetching trade details:", error);

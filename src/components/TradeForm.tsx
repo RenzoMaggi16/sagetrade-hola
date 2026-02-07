@@ -17,7 +17,7 @@ import { format } from "date-fns";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AccountFormDialog } from "@/components/AccountFormDialog";
-import { StrategyFormDialog } from "@/components/StrategyFormDialog";
+
 
 // --- Types (Define these properly if you have them elsewhere) ---
 interface Strategy {
@@ -75,29 +75,25 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
   const [postTradeNotes, setPostTradeNotes] = useState<string>('');
   const [setupRating, setSetupRating] = useState<string>(''); // Estado para Setup Rating
 
-  // Estados para estrategias y reglas
-  const [strategies, setStrategies] = useState<Strategy[]>([]); // Usar el tipo Strategy
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
-  const [rulesForStrategy, setRulesForStrategy] = useState<Rule[]>([]); // Usar el tipo Rule
-  const [brokenRuleIds, setBrokenRuleIds] = useState<string[]>([]);
-  const [loadingRules, setLoadingRules] = useState(false);
-
   // Estados para cuentas
   const [accounts, setAccounts] = useState<any[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
 
-  // Estado para dialog de estrategia
-  const [isStrategyDialogOpen, setIsStrategyDialogOpen] = useState(false);
+  // Estados para estrategias y reglas
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
+  const [brokenRuleIds, setBrokenRuleIds] = useState<string[]>([]);
 
-  // Estado unificado para otros campos del formulario
+  // Estados unificado para otros campos del formulario
   const [formData, setFormData] = useState({
     par: "", // Renombrado de simbolo
     pnl_neto: "",
     riesgo: "", // Nuevo campo, reemplaza cantidad
-    emocion: "",
+    emocion: "", // Mantenemos emocion en formData pero el selector está separado si se desea
     trade_type: "buy" as "buy" | "sell",
-    reglas_cumplidas: true, // Renombrado de broken_rules? Mejor mantenerlo simple
+    reglas_cumplidas: true, // Legacy field, might not be needed if using brokenRuleIds logic fully
   });
 
   // Estados para URLs de imágenes de gráficos
@@ -124,32 +120,14 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
     // Aunque ahora se maneja con brokenRuleIds, mantenemos este por si acaso
     setFormData((prev) => ({ ...prev, reglas_cumplidas: !!checked }));
   };
-  // --- Fin Handlers ---
 
-
-  // Función para cargar estrategias (reutilizable)
-  const fetchStrategies = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return; // Salir si no hay usuario
-
-    const { data, error } = await supabase
-      .from('strategies')
-      .select('id, name')
-      .eq('user_id', user.id)
-      .order('name'); // Ordenar por nombre
-
-    if (error) {
-      console.error("Error fetching strategies:", error);
-      toast.error("No se pudieron cargar las estrategias");
-    } else {
-      setStrategies(data || []);
-    }
+  // Handler para checkboxes de reglas rotas
+  const handleRuleCheckboxChange = (ruleId: string, checked: boolean) => {
+    setBrokenRuleIds(prev =>
+      checked ? [...prev, ruleId] : prev.filter(id => id !== ruleId)
+    );
   };
-
-  // Efecto para cargar las estrategias
-  useEffect(() => {
-    fetchStrategies();
-  }, []); // Dependencia vacía para ejecutar solo al montar
+  // --- Fin Handlers ---
 
   const fetchAccounts = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -174,68 +152,58 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
     }
   };
 
-  // Efecto para cargar las cuentas del usuario
+  const fetchStrategies = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await (supabase as any)
+      .from('strategies')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .order('name');
+
+    if (error) {
+      console.error("Error fetching strategies:", error);
+    } else {
+      setStrategies((data || []) as any);
+    }
+  };
+
+  const fetchRules = async (strategyId: string) => {
+    if (!strategyId) {
+      setRules([]);
+      return;
+    }
+    const { data, error } = await (supabase as any)
+      .from('rules')
+      .select('id, rule_text, strategy_id')
+      .eq('strategy_id', strategyId);
+
+    if (error) {
+      console.error("Error fetching rules:", error);
+    } else {
+      setRules((data || []) as any);
+    }
+  };
+
+  // Efecto para cargar estrategias y cuentas
   useEffect(() => {
     fetchAccounts();
+    fetchStrategies();
   }, []);
 
-  // Efecto para cargar las reglas cuando cambia la estrategia seleccionada
+  // Efecto para cargar reglas cuando cambia la estrategia seleccionada
   useEffect(() => {
-    const fetchRules = async () => {
-      // 1. RESETEAR SIEMPRE las reglas rotas al cambiar de estrategia
-      setBrokenRuleIds([]);
+    if (selectedStrategyId) {
+      fetchRules(selectedStrategyId);
+    } else {
+      setRules([]);
+    }
+  }, [selectedStrategyId]);
 
-      if (!selectedStrategyId) {
-        setRulesForStrategy([]); // Limpiar la lista de reglas si no hay estrategia
-        return; // Salir
-      }
-
-      setLoadingRules(true); // Activar carga
-      try {
-        // Cargar las reglas de la NUEVA estrategia
-        const { data, error } = await supabase
-          .from('rules')
-          .select('id, rule_text')
-          .eq('strategy_id', selectedStrategyId)
-          .order('created_at'); // Ordenar por creación
-
-        if (error) throw error;
-
-        setRulesForStrategy(data || []);
-
-      } catch (error: any) {
-        console.error("Error fetching rules:", error);
-        toast.error("Error al cargar las reglas: " + error.message);
-        setRulesForStrategy([]);
-      } finally {
-        setLoadingRules(false);
-      }
-    };
-
-    fetchRules();
-  }, [selectedStrategyId]); // La dependencia es correcta
 
   // Efecto para cargar datos del trade a editar
   useEffect(() => {
-    // Función interna para cargar las reglas rotas de este trade
-    const fetchBrokenRules = async (tradeId: string | number) => {
-      setLoadingRules(true);
-      const { data, error } = await supabase
-        .from('broken_rules_by_trade')
-        .select('rule_id') // Solo necesitamos los IDs
-        .eq('trade_id', tradeId);
-
-      if (error) {
-        console.error("Error fetching broken rules for edit:", error);
-        toast.error("Error al cargar reglas rotas: " + error.message);
-        setBrokenRuleIds([]);
-      } else {
-        const ids = data.map((item: any) => item.rule_id);
-        setBrokenRuleIds(ids);
-      }
-      setLoadingRules(false);
-    };
-
     // Si estamos en modo EDICIÓN
     if (tradeToEdit) {
       // 1. Rellenar campos de formData
@@ -261,14 +229,27 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       setImageUrlM5(tradeToEdit.image_url_m5 || '');
       setImageUrlM15(tradeToEdit.image_url_m15 || '');
 
-      // 3. Rellenar Dropdowns (¡LA CLAVE DEL ERROR!)
+      // 3. Rellenar Dropdowns
       setSelectedAccountId(tradeToEdit.account_id || null);
-      setSelectedStrategyId(tradeToEdit.strategy_id || null); // Esto disparará el useEffect que carga las reglas
 
-      // 4. Cargar reglas rotas
-      if (tradeToEdit.id) {
-        fetchBrokenRules(tradeToEdit.id);
+      // Strategies & Broken Rules
+      if (tradeToEdit.strategy_id) {
+        setSelectedStrategyId(tradeToEdit.strategy_id);
+        // Fetch broken rules for this trade
+        const fetchBrokenRules = async () => {
+          const { data, error } = await (supabase as any)
+            .from('broken_rules_by_trade')
+            .select('rule_id') // Assuming column name is rule_id based on typical junction table
+            .eq('trade_id', tradeToEdit.id);
+
+          if (!error && data) {
+            // @ts-ignore
+            setBrokenRuleIds(data.map(item => item.rule_id));
+          }
+        };
+        fetchBrokenRules();
       }
+
     } else {
       // Lógica para resetear el formulario si estamos en modo "NUEVO TRADE"
       setFormData({
@@ -288,11 +269,17 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       setImageUrlM1('');
       setImageUrlM5('');
       setImageUrlM15('');
-      setSelectedAccountId(null);
       setSelectedStrategyId(null);
       setBrokenRuleIds([]);
+
+      // Auto-seleccionar cuenta si hay cuentas disponibles
+      if (accounts.length > 0) {
+        setSelectedAccountId(accounts[0].id);
+      } else {
+        setSelectedAccountId(null);
+      }
     }
-  }, [tradeToEdit]);
+  }, [tradeToEdit, accounts]);
 
   // --- handleSubmit Corregido ---
   const handleSubmit = async (e: FormEvent) => {
@@ -331,7 +318,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       const tradeDataObject = {
         user_id: user.id,
         account_id: selectedAccountId,
-        strategy_id: selectedStrategyId,
+        strategy_id: selectedStrategyId || null,
         par: formData.par.toUpperCase() || null,
         pnl_neto: formData.pnl_neto === "" ? 0 : parseFloat(formData.pnl_neto),
         riesgo: parseFloat(formData.riesgo) || null,
@@ -361,13 +348,32 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         if (updateError) throw updateError;
         tradeId = updatedTrade.id;
 
-        // 1. Borrar TODAS las reglas rotas antiguas de este trade
-        const { error: deleteError } = await supabase
+        // 2. Gestionar Broken Rules
+        // a. Borrar existentes
+        const { error: deleteRulesError } = await (supabase as any)
           .from('broken_rules_by_trade')
           .delete()
           .eq('trade_id', tradeId);
 
-        if (deleteError) throw deleteError;
+        if (deleteRulesError) console.error("Error cleaning up old rules", deleteRulesError);
+
+        // b. Insertar nuevas
+        if (brokenRuleIds.length > 0) {
+          const rulesToInsert = brokenRuleIds.map(ruleId => ({
+            trade_id: tradeId,
+            rule_id: ruleId,
+            user_id: user.id
+          }));
+
+          const { error: insertRulesError } = await (supabase as any)
+            .from('broken_rules_by_trade')
+            .insert(rulesToInsert);
+
+          if (insertRulesError) {
+            console.error("Error inserting broken rules", insertRulesError);
+            toast.error("Error al guardar reglas rotas: " + insertRulesError.message);
+          }
+        }
 
         toast.success("Trade actualizado con éxito");
 
@@ -383,6 +389,24 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         if (!newTrade?.id) throw new Error("No se pudo crear el trade.");
 
         tradeId = newTrade.id;
+
+        // Broken Rules Insertion for NEW Trade
+        if (brokenRuleIds.length > 0) {
+          const rulesToInsert = brokenRuleIds.map(ruleId => ({
+            trade_id: tradeId,
+            rule_id: ruleId,
+            user_id: user.id
+          }));
+
+          const { error: insertRulesError } = await (supabase as any)
+            .from('broken_rules_by_trade')
+            .insert(rulesToInsert);
+
+          if (insertRulesError) {
+            console.error("Error inserting broken rules", insertRulesError);
+            toast.error("Error al guardar reglas rotas: " + insertRulesError.message);
+          }
+        }
 
         // Actualizar Current Capital de la cuenta
         const { data: accountData, error: accountError } = await supabase
@@ -406,23 +430,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         toast.success("Trade registrado con éxito");
       }
 
-      // --- LÓGICA DE REGLAS ROTAS (PARA AMBOS MODOS) ---
-      if (brokenRuleIds.length > 0) {
-        const brokenRulesToInsert = brokenRuleIds.map(ruleId => ({
-          trade_id: tradeId,
-          rule_id: ruleId,
-          user_id: user.id
-        }));
-
-        const { error: brokenRulesError } = await supabase
-          .from('broken_rules_by_trade')
-          .insert(brokenRulesToInsert);
-
-        if (brokenRulesError) {
-          console.error("Error guardando reglas rotas:", brokenRulesError);
-          toast.error("Trade guardado, pero falló al guardar las reglas rotas.");
-        }
-      }
+      // Broken rules insertion removed
 
       // Éxito: Resetear formulario y refrescar datos
       queryClient.invalidateQueries({ queryKey: ["tradesList"] }); // Refresca la tabla
@@ -452,9 +460,15 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         setImageUrlM1('');
         setImageUrlM5('');
         setImageUrlM15('');
-        setSelectedAccountId(null);
         setSelectedStrategyId(null);
         setBrokenRuleIds([]);
+
+        // Mantener la cuenta seleccionada o seleccionar la primera
+        if (accounts.length > 0) {
+          setSelectedAccountId(accounts[0].id);
+        } else {
+          setSelectedAccountId(null);
+        }
       }
 
     } catch (error: any) {
@@ -589,34 +603,53 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
             </div>
           </div>
 
-          {/* Fila Estrategia y Emoción */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="strategy-select">Estrategia Aplicada</Label>
-              <div className="flex items-center gap-2">
-                <Select value={selectedStrategyId || ''} onValueChange={(value) => setSelectedStrategyId(value || null)}>
-                  <SelectTrigger id="strategy-select" className="bg-secondary flex-grow">
-                    <SelectValue placeholder="Seleccionar estrategia..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {strategies.map((strategy) => (
-                      <SelectItem key={strategy.id} value={strategy.id}>
-                        {strategy.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsStrategyDialogOpen(true)}
-                  aria-label="Añadir nueva estrategia"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+          {/* Fila Estrategia */}
+          <div className="space-y-2">
+            <Label htmlFor="strategy-select">Estrategia</Label>
+            <Select
+              value={selectedStrategyId || "none"}
+              onValueChange={(value) => setSelectedStrategyId(value === "none" ? null : value)}
+            >
+              <SelectTrigger id="strategy-select">
+                <SelectValue placeholder="Seleccionar estrategia..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Ninguna</SelectItem>
+                {strategies.map((strategy) => (
+                  <SelectItem key={strategy.id} value={strategy.id}>
+                    {strategy.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Reglas de la Estrategia (Solo si hay estrategia seleccionada) */}
+          {selectedStrategyId && rules.length > 0 && (
+            <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+              <Label className="text-base font-semibold text-destructive">Reglas Rotas (Marcar las que NO se cumplieron)</Label>
+              <div className="grid grid-cols-1 gap-2">
+                {rules.map((rule) => (
+                  <div key={rule.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`rule-${rule.id}`}
+                      checked={brokenRuleIds.includes(rule.id)}
+                      onCheckedChange={(checked) => handleRuleCheckboxChange(rule.id, !!checked)}
+                    />
+                    <label
+                      htmlFor={`rule-${rule.id}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      {rule.rule_text}
+                    </label>
+                  </div>
+                ))}
               </div>
             </div>
+          )}
+
+          {/* Fila Emoción */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="emocion">Emoción</Label>
               <Combobox
@@ -627,41 +660,11 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
                 emptyMessage="No se encontraron emociones."
               />
             </div>
+            <div className="space-y-2">
+              {/* Empty placeholder to keep alignment if needed, or just remove grid */}
+            </div>
           </div>
 
-          {/* Sección Reglas Rotas (Dinámica) */}
-          {selectedStrategyId && (
-            <div className="space-y-3 pt-4">
-              <Label className="font-semibold text-lg">Reglas de la Estrategia (Marca las que rompiste)</Label>
-              {loadingRules ? (
-                <p>Cargando reglas...</p>
-              ) : rulesForStrategy.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No hay reglas definidas para esta estrategia.</p>
-              ) : (
-                <div className="space-y-2 rounded-md border p-4 bg-secondary/30">
-                  {rulesForStrategy.map((rule) => (
-                    <div key={rule.id} className="flex items-center space-x-3">
-                      <Checkbox
-                        id={`rule-${rule.id}`}
-                        checked={brokenRuleIds.includes(rule.id)} // Marcar si SÍ está en la lista de rotas
-                        onCheckedChange={(checked) => {
-                          const isChecked = !!checked; // Asegurarse de que sea boolean
-                          setBrokenRuleIds((prev) =>
-                            isChecked // Si se marca (es true)
-                              ? [...prev, rule.id] // Añadir a la lista de rotas
-                              : prev.filter((id) => id !== rule.id) // Quitar de la lista de rotas
-                          );
-                        }}
-                      />
-                      <Label htmlFor={`rule-${rule.id}`} className="font-normal cursor-pointer leading-snug">
-                        {rule.rule_text}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Calificación del Setup */}
           <div className="space-y-3 pt-4">
@@ -748,15 +751,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
           }}
         />
 
-        <StrategyFormDialog
-          isOpen={isStrategyDialogOpen}
-          onOpenChange={setIsStrategyDialogOpen}
-          onSaveSuccess={(newStrategy) => {
-            fetchStrategies();
-            if (newStrategy?.id) setSelectedStrategyId(newStrategy.id);
-            setIsStrategyDialogOpen(false);
-          }}
-        />
+
       </CardContent>
     </Card>
   );

@@ -11,8 +11,9 @@ import { WinLossRatioBar } from "./dashboard/WinLossRatioBar";
 import { StreakStats } from "./dashboard/StreakStats";
 import { TradeCountChart } from "./dashboard/TradeCountChart";
 import { ProfitFactorChart } from "./dashboard/ProfitFactorChart";
-import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
+import { DateRange } from "react-day-picker";
 
 interface Trade {
   id: string;
@@ -33,6 +34,7 @@ interface Account {
 
 export const Dashboard = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   // 1. Fetch Accounts
   const { data: accounts = [], isLoading: isLoadingAccounts } = useQuery({
@@ -56,7 +58,7 @@ export const Dashboard = () => {
   }, [accounts, selectedAccountId]);
 
   // 3. Fetch Trades (Filtered by selectedAccountId)
-  const { data: trades = [] } = useQuery({
+  const { data: allTrades = [] } = useQuery({
     queryKey: ["trades", selectedAccountId],
     enabled: !!selectedAccountId, // Only run if an account is selected
     queryFn: async () => {
@@ -72,6 +74,25 @@ export const Dashboard = () => {
       return data as Trade[];
     },
   });
+
+  // 4. Filter Trades by Date Range
+  const filteredTrades = useMemo(() => {
+    if (!dateRange || !dateRange.from) {
+      return allTrades;
+    }
+
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+
+    return allTrades.filter((trade) => {
+      const tradeDate = parseISO(trade.entry_time);
+      return isWithinInterval(tradeDate, { start: from, end: to });
+    });
+  }, [allTrades, dateRange]);
+
+  // Make sure we use filteredTrades primarily, but sometimes we might want global context?
+  // User requested "all elements should adapt to the filter".
+  const trades = filteredTrades;
 
   // Calculate Metrics
   const metrics = useMemo(() => {
@@ -129,18 +150,15 @@ export const Dashboard = () => {
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 100 : 0; // If loss is 0 but visible profit, big number. Can adjust visualization.
 
 
-    // 5. Best Day Logic (Current Week)
-    const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 1 }); // Monday start
-    const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 1 });
+    // 5. Best Day Logic (Current Week) - THIS SHOULD PROBABLY BE BEST DAY OF THE SELECTED PERIOD IF FILTERED?
+    // User asked: "si elije para que se muestren la ultima semana de operaciones... los elementos se deben ajustar a esa ultima semana"
+    // So "Best Day" should be best day within the filtered range.
 
-    const currentWeekTrades = trades.filter(t =>
-      isWithinInterval(parseISO(t.entry_time), { start: startOfCurrentWeek, end: endOfCurrentWeek })
-    );
+    // Logic below was calculating based on "Start of Current Week" always. Let's adapt it to use the full filtered range.
+    // If we are filtering, we look at the filtered trades.
 
     const profitsByDay = new Array(7).fill(0);
-    currentWeekTrades.forEach(t => {
-      // getDay returns 0 for Sunday, we want to map this correctly if needed, 
-      // but simpler is just to accumulate by getDay index (0-6)
+    trades.forEach(t => {
       const date = parseISO(t.entry_time);
       const dayIndex = getDay(date);
       profitsByDay[dayIndex] += Number(t.pnl_neto);
@@ -156,26 +174,47 @@ export const Dashboard = () => {
       }
     });
 
-    // If no profit at all, maybe handle gracefully
     if (maxDayProfit <= 0) {
       bestDayIndex = -1;
     }
 
     const bestDayName = bestDayIndex >= 0 ? format(new Date().setDate(new Date().getDate() - new Date().getDay() + bestDayIndex), 'EEEE', { locale: es }) : "N/A";
-    const capital = accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1; // Avoid div 0
+    const capital = accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1;
     const bestDayPercentage = bestDayIndex >= 0 ? (maxDayProfit / capital) * 100 : 0;
 
 
-    // 6. Trade Count Chart Data
+    // 6. Trade Count Chart Data (Based on filtered range or Last 30 Days if no filter?)
+    // If Filter is active, show chart for that range. If not, show last 30 days.
+
     const tradeCountsByDay = new Map<string, number>();
     sortedTrades.forEach(t => {
       const dateStr = format(parseISO(t.entry_time), 'yyyy-MM-dd');
       tradeCountsByDay.set(dateStr, (tradeCountsByDay.get(dateStr) || 0) + 1);
     });
 
-    const countChartData = Array.from(tradeCountsByDay.entries())
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    let intervalStart = subDays(today, 29);
+    let intervalEnd = today;
+
+    if (dateRange && dateRange.from) {
+      intervalStart = dateRange.from;
+      intervalEnd = dateRange.to || dateRange.from;
+    }
+
+    // Handle case where interval is small or large. eachDayOfInterval throws if start > end
+    if (intervalStart > intervalEnd) intervalEnd = intervalStart;
+
+    const chartInterval = eachDayOfInterval({
+      start: intervalStart,
+      end: intervalEnd
+    });
+
+    const countChartData = chartInterval.map(date => {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      return {
+        date: dateStr,
+        count: tradeCountsByDay.get(dateStr) || 0
+      };
+    });
 
 
     return {
@@ -200,36 +239,72 @@ export const Dashboard = () => {
       bestDayProfit: maxDayProfit,
       bestDayIndex
     };
-  }, [trades]);
+  }, [trades, accounts, selectedAccountId, dateRange]); // Dependencies include dateRange now implicitly via trades, but safer to list
 
   // Equity Curve Data & Current Balance Calculation
   // Formula: Current Balance = SelectedAccount.InitialCapital + Sum(AllSelectedAccountTrades.PnL)
+  // NOTE: Equity Curve typically shows history. If I filter to "Last Week", should equity curve show only last week's curve starting from ???
+  // Usually Equity curve shows "Account Performance". If we filter to a range, usually we show the curve FOR THAT RANGE.
+  // But the "Current Balance" stat usually implies "Right Now". 
+  // User said: "los elementos se deben ajustar".
+  // Let's make the Stats show the PnL for the period, and the Equity Curve show the curve for the period.
+  // BUT "Balance" card title implies total balance. 
+  // Let's keep "Current Balance" as the TOTAL account balance (using allTrades), but maybe the chart only shows the filtered period?
+  // Or maybe "Balance" in this context means "Balance at end of period" vs "Balance at start".
+  // Let's stick to standard behavior: filtered range affects the displayed data points.
+  // For Equity Curve: We need the running balance.
+  // We should calculate the running balance from the BEGINNING of time up to the start of the filter, to get the "Opening Balance" for the chart.
+
   const { equityCurveData, currentBalance } = useMemo(() => {
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     const initialCapital = selectedAccount?.initial_capital || 0;
 
-    if (!trades || trades.length === 0) {
-      // If no trades, balance is just initial capital
+    // We need ALL trades to calculate absolute balance
+    if (!allTrades || allTrades.length === 0) {
       return { equityCurveData: [], currentBalance: initialCapital };
     }
 
-    const sortedTrades = [...trades].sort((a, b) => new Date(a.entry_time).getTime() - new Date(b.entry_time).getTime());
-    let runningPnl = 0;
+    const sortedAllTrades = [...allTrades].sort((a, b) => new Date(a.entry_time).getTime() - new Date(b.entry_time).getTime());
 
-    const curve = sortedTrades.map(trade => {
+    // Calculate PnL up to the start of the filter
+    let startBalance = initialCapital;
+    let filteredCurveTrades = sortedAllTrades;
+
+    if (dateRange && dateRange.from) {
+      const fromTime = startOfDay(dateRange.from).getTime();
+      const toTime = dateRange.to ? endOfDay(dateRange.to).getTime() : endOfDay(dateRange.from).getTime();
+
+      const preTrades = sortedAllTrades.filter(t => new Date(t.entry_time).getTime() < fromTime);
+      const prePnL = preTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
+      startBalance = initialCapital + prePnL;
+
+      filteredCurveTrades = sortedAllTrades.filter(t => {
+        const tTime = new Date(t.entry_time).getTime();
+        return tTime >= fromTime && tTime <= toTime;
+      });
+    }
+
+    let runningPnl = 0; // Relative to startBalance
+    const curve = filteredCurveTrades.map(trade => {
       runningPnl += Number(trade.pnl_neto);
       return {
         date: new Date(trade.entry_time).toLocaleDateString(),
-        cumulativePnl: runningPnl, // Display PnL relative to 0
-        balance: initialCapital + runningPnl // Actual Balance
+        cumulativePnl: runningPnl,
+        balance: startBalance + runningPnl
       };
     });
 
+    // Current Balance is always the Final Balance of the account (unless we want 'Closing Balance of Period')
+    // If I filter "Last week", seeing "Balance: $10,000" (current) makes sense.
+    // Seeing "Balance: $50" (profit made that week) would be misleading for "Balance".
+    // So "Current Balance" should probably remain "Total Account Balance".
+    const totalPnL = sortedAllTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
+
     return {
-      equityCurveData: curve, // If we want to show balance curve, we use 'balance' prop, but EquityChart might expect cumulativePnl
-      currentBalance: initialCapital + runningPnl
+      equityCurveData: curve,
+      currentBalance: initialCapital + totalPnL
     };
-  }, [trades, accounts, selectedAccountId]);
+  }, [allTrades, accounts, selectedAccountId, dateRange]);
 
   // If no account is selected (loading or empty), show friendly state
   if (!selectedAccountId && !isLoadingAccounts) {
@@ -242,6 +317,8 @@ export const Dashboard = () => {
         selectedAccountId={selectedAccountId}
         onAccountChange={setSelectedAccountId}
         accounts={accounts} // Passing full account objects
+        dateRange={dateRange}
+        setDateRange={setDateRange}
       />
 
       {/* KPI Row */}
@@ -271,9 +348,9 @@ export const Dashboard = () => {
         {/* Trade Count Card */}
         <StatCard title="Número total de operaciones" value={metrics?.totalTrades || 0}>
           <div className="mt-2 text-xs text-muted-foreground flex justify-between mb-1">
-            <span>Last 1D</span>
-            <span>1W</span>
-            <span>1M</span>
+            <span>{dateRange ? 'Inicio' : 'Ultimo dia'}</span>
+            <span>{dateRange ? 'Rango' : 'Ultima semana'}</span>
+            <span>{dateRange ? 'Fin' : 'Ultimo mes'}</span>
           </div>
           <TradeCountChart data={metrics?.countChartData || []} />
         </StatCard>
@@ -344,7 +421,7 @@ export const Dashboard = () => {
 
         {/* Right Column: Calendar */}
         <div className="col-span-1 md:col-span-3">
-          <PnLCalendar selectedAccountId={selectedAccountId} />
+          <PnLCalendar trades={trades} />
         </div>
       </div>
     </div>

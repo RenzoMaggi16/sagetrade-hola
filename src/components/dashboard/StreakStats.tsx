@@ -28,7 +28,7 @@ export const StreakStats = ({
                     />
                 </span>
                 <span className="text-xs text-muted-foreground mt-1">
-                    {type === 'win' ? 'Winstreak' : type === 'loss' ? 'Lossstreak' : 'Streak'}
+                    {type === 'win' ? 'Racha de victorias' : type === 'loss' ? 'Racha de pérdidas' : 'Racha'}
                 </span>
             </div>
 
@@ -37,13 +37,13 @@ export const StreakStats = ({
                     <span className="bg-profit/20 text-profit px-2 py-0.5 rounded text-xs font-bold">
                         {bestStreak}
                     </span>
-                    <span className="text-xs text-muted-foreground">Best</span>
+                    <span className="text-xs text-muted-foreground">Racha profit</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="bg-loss/20 text-loss px-2 py-0.5 rounded text-xs font-bold">
                         {worstStreak}
                     </span>
-                    <span className="text-xs text-muted-foreground">Worst</span>
+                    <span className="text-xs text-muted-foreground">Racha perdidas</span>
                 </div>
             </div>
         </div>

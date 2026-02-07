@@ -1,6 +1,4 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, isThisMonth } from "date-fns";
@@ -21,35 +19,15 @@ interface DayPnL {
 }
 
 interface PnLCalendarProps {
-  selectedAccountId?: string | null;
+  // selectedAccountId: string | null; // Removed, now receives trades directly
+  trades: Trade[];
 }
 
-export const PnLCalendar = ({ selectedAccountId }: PnLCalendarProps) => {
+export const PnLCalendar = ({ trades }: PnLCalendarProps) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [dailyPnL, setDailyPnL] = useState<DayPnL[]>([]);
 
-  const { data: trades = [] } = useQuery({
-    queryKey: ["trades-calendar", format(currentMonth, "yyyy-MM"), selectedAccountId],
-    queryFn: async () => {
-      const startDate = startOfMonth(currentMonth);
-      const endDate = endOfMonth(currentMonth);
-
-      let query = supabase
-        .from("trades")
-        .select("id, entry_time, pnl_neto")
-        .gte("entry_time", startDate.toISOString())
-        .lte("entry_time", endDate.toISOString());
-
-      if (selectedAccountId) {
-        query = query.eq("account_id", selectedAccountId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      return data as Trade[];
-    },
-  });
+  // Internal query removed in favor of passed props
 
   useEffect(() => {
     // Calcular el PnL diario
