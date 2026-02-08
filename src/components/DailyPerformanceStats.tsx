@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { isSameDay } from "date-fns";
 import { useMemo } from "react";
+import type { CalendarDisplayMode } from "@/components/Dashboard";
 
 interface Trade {
     entry_time: string;
@@ -11,9 +12,11 @@ interface Trade {
 
 interface DailyPerformanceStatsProps {
     trades: Trade[];
+    displayMode?: CalendarDisplayMode;
+    initialCapital?: number;
 }
 
-export function DailyPerformanceStats({ trades }: DailyPerformanceStatsProps) {
+export function DailyPerformanceStats({ trades, displayMode = 'dollars', initialCapital = 0 }: DailyPerformanceStatsProps) {
     const stats = useMemo(() => {
         // 1. Group trades by day and calculate daily PnL
         const dailyPnLMap = new Map<string, number>();
@@ -56,10 +59,13 @@ export function DailyPerformanceStats({ trades }: DailyPerformanceStatsProps) {
                 </CardHeader>
                 <CardContent>
                     <div className="text-2xl font-bold text-profit-custom">
-                        ${stats.avgDailyProfit.toFixed(2)}
+                        {displayMode === 'percentage' && initialCapital > 0
+                            ? `${((stats.avgDailyProfit / initialCapital) * 100).toFixed(2)}%`
+                            : `$${stats.avgDailyProfit.toFixed(2)}`
+                        }
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                        
+
                     </p>
                 </CardContent>
             </Card>
@@ -71,10 +77,13 @@ export function DailyPerformanceStats({ trades }: DailyPerformanceStatsProps) {
                 </CardHeader>
                 <CardContent>
                     <div className="text-2xl font-bold text-loss-custom">
-                        -${Math.abs(stats.avgDailyLoss).toFixed(2)}
+                        {displayMode === 'percentage' && initialCapital > 0
+                            ? `-${((Math.abs(stats.avgDailyLoss) / initialCapital) * 100).toFixed(2)}%`
+                            : `-$${Math.abs(stats.avgDailyLoss).toFixed(2)}`
+                        }
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                        
+
                     </p>
                 </CardContent>
             </Card>

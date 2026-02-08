@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Settings, RefreshCw, Calendar as CalendarIcon, Filter, X } from "lucide-react";
+import { Settings, RefreshCw, Calendar as CalendarIcon, Filter, X, DollarSign, Percent } from "lucide-react";
+import type { CalendarDisplayMode } from "@/components/Dashboard";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,9 +19,11 @@ interface DashboardHeaderProps {
     accounts: { id: string; account_name: string; account_type: string }[];
     dateRange: DateRange | undefined;
     setDateRange: (range: DateRange | undefined) => void;
+    displayMode: CalendarDisplayMode;
+    setDisplayMode: (mode: CalendarDisplayMode) => void;
 }
 
-export const DashboardHeader = ({ selectedAccountId, onAccountChange, accounts, dateRange, setDateRange }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ selectedAccountId, onAccountChange, accounts, dateRange, setDateRange, displayMode, setDisplayMode }: DashboardHeaderProps) => {
     const [userName, setUserName] = useState<string>("Trader");
     const [lastSync, setLastSync] = useState<string>("Ahora mismo");
 
@@ -87,6 +90,21 @@ export const DashboardHeader = ({ selectedAccountId, onAccountChange, accounts, 
                                 {acc.account_name}
                             </SelectItem>
                         ))}
+                    </SelectContent>
+                </Select>
+
+                {/* Display Mode Toggle */}
+                <Select value={displayMode} onValueChange={(val) => setDisplayMode(val as CalendarDisplayMode)}>
+                    <SelectTrigger className="w-[140px] bg-card border-border/50">
+                        <SelectValue placeholder="Modo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="dollars">
+                            <span className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Dólares</span>
+                        </SelectItem>
+                        <SelectItem value="percentage">
+                            <span className="flex items-center gap-2"><Percent className="h-4 w-4" /> Porcentaje</span>
+                        </SelectItem>
                     </SelectContent>
                 </Select>
 

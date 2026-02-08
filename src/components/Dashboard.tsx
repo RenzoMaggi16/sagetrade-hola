@@ -14,6 +14,8 @@ import { ProfitFactorChart } from "./dashboard/ProfitFactorChart";
 import { DailyPerformanceStats } from "@/components/DailyPerformanceStats";
 import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
+
+export type CalendarDisplayMode = 'dollars' | 'percentage';
 import { DateRange } from "react-day-picker";
 
 interface Trade {
@@ -36,6 +38,15 @@ interface Account {
 export const Dashboard = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>(() => {
+    const saved = localStorage.getItem('calendar-display-mode');
+    return (saved === 'percentage' ? 'percentage' : 'dollars') as CalendarDisplayMode;
+  });
+
+  const handleDisplayModeChange = (mode: CalendarDisplayMode) => {
+    setDisplayMode(mode);
+    localStorage.setItem('calendar-display-mode', mode);
+  };
 
   // 1. Fetch Accounts
   const { data: accounts = [], isLoading: isLoadingAccounts } = useQuery({
@@ -317,9 +328,11 @@ export const Dashboard = () => {
       <DashboardHeader
         selectedAccountId={selectedAccountId}
         onAccountChange={setSelectedAccountId}
-        accounts={accounts} // Passing full account objects
+        accounts={accounts}
         dateRange={dateRange}
         setDateRange={setDateRange}
+        displayMode={displayMode}
+        setDisplayMode={handleDisplayModeChange}
       />
 
       {/* KPI Row */}
@@ -412,7 +425,11 @@ export const Dashboard = () => {
           </StatCard>
 
           {/* Balance Filtered */}
-          <StatCard title="Balance" value={`$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} className="flex-grow flex flex-col">
+          <StatCard title="Balance" value={
+            displayMode === 'percentage' && (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0) > 0
+              ? `${(((currentBalance - (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0)) / (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1)) * 100).toFixed(2)}%`
+              : `$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+          } className="flex-grow flex flex-col">
             <div className="flex-grow min-h-[150px]">
               {/* Pass simply cumulativePnl for now to keep chart logic simple, or update EquityChart to take absolute balance */}
               <EquityChart data={equityCurveData.map(d => ({ date: d.date, cumulativePnl: d.cumulativePnl }))} />
@@ -422,9 +439,17 @@ export const Dashboard = () => {
 
         {/* Right Column: Calendar */}
         <div className="col-span-1 md:col-span-3">
-          <PnLCalendar trades={trades} />
+          <PnLCalendar
+            trades={trades}
+            displayMode={displayMode}
+            initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
+          />
           <div className="mt-4">
-            <DailyPerformanceStats trades={trades} />
+            <DailyPerformanceStats
+              trades={trades}
+              displayMode={displayMode}
+              initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
+            />
           </div>
         </div>
       </div>

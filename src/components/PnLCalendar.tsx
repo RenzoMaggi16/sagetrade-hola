@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { CalendarDisplayMode } from "@/components/Dashboard";
 
 interface Trade {
   id: string;
@@ -19,11 +20,12 @@ interface DayPnL {
 }
 
 interface PnLCalendarProps {
-  // selectedAccountId: string | null; // Removed, now receives trades directly
   trades: Trade[];
+  displayMode?: CalendarDisplayMode;
+  initialCapital?: number;
 }
 
-export const PnLCalendar = ({ trades = [] }: PnLCalendarProps) => {
+export const PnLCalendar = ({ trades = [], displayMode = 'dollars', initialCapital = 0 }: PnLCalendarProps) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [dailyPnL, setDailyPnL] = useState<DayPnL[]>([]);
 
@@ -153,7 +155,10 @@ export const PnLCalendar = ({ trades = [] }: PnLCalendarProps) => {
                   <div className="flex items-center justify-center">
                     {hasTrades ? (
                       <span className={`text-sm font-medium ${isNeutral ? 'text-neutral-300' : ''}`}>
-                        ${Math.abs(dayPnL.pnl).toFixed(2)}
+                        {displayMode === 'percentage' && initialCapital > 0
+                          ? `${((dayPnL.pnl / initialCapital) * 100).toFixed(2)}%`
+                          : `$${Math.abs(dayPnL.pnl).toFixed(2)}`
+                        }
                       </span>
                     ) : (
                       // Only show 'Sin Trade' if we are in this month component context, 
