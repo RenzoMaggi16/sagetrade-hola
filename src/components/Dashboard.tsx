@@ -362,9 +362,9 @@ export const Dashboard = () => {
         {/* Trade Count Card */}
         <StatCard title="Número total de operaciones" value={metrics?.totalTrades || 0}>
           <div className="mt-2 text-xs text-muted-foreground flex justify-between mb-1">
-            <span>{dateRange ? 'Inicio' : 'Ultimo dia'}</span>
-            <span>{dateRange ? 'Rango' : 'Ultima semana'}</span>
-            <span>{dateRange ? 'Fin' : 'Ultimo mes'}</span>
+            <span>{dateRange ? 'Inicio' : ''}</span>
+            <span>{dateRange ? 'Rango' : ''}</span>
+            <span>{dateRange ? 'Fin' : ''}</span>
           </div>
           <TradeCountChart data={metrics?.countChartData || []} />
         </StatCard>
