@@ -116,8 +116,9 @@ export const Dashboard = () => {
     // 1. Global Stats
     const totalTrades = trades.length;
     const wins = trades.filter(t => t.pnl_neto > 0);
-    const losses = trades.filter(t => t.pnl_neto <= 0);
-    const winRate = totalTrades > 0 ? (wins.length / totalTrades) * 100 : 0;
+    const losses = trades.filter(t => t.pnl_neto < 0); // Breakeven (0) is neutral, not a loss
+    const nonBreakevenTrades = wins.length + losses.length; // Only count wins and losses for win rate
+    const winRate = nonBreakevenTrades > 0 ? (wins.length / nonBreakevenTrades) * 100 : 0;
 
     const avgWin = wins.length > 0 ? wins.reduce((sum, t) => sum + Number(t.pnl_neto), 0) / wins.length : 0;
     const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((sum, t) => sum + Number(t.pnl_neto), 0) / losses.length) : 0;
@@ -126,13 +127,14 @@ export const Dashboard = () => {
     // 2. Daily Stats
     const dailyTrades = trades.filter(t => isSameDay(parseISO(t.entry_time), today));
     const dailyWins = dailyTrades.filter(t => t.pnl_neto > 0);
-    const dailyLosses = dailyTrades.filter(t => t.pnl_neto <= 0);
+    const dailyLosses = dailyTrades.filter(t => t.pnl_neto < 0); // Breakeven is neutral
+    const dailyNonBreakeven = dailyWins.length + dailyLosses.length;
 
-    const dailyWinRate = dailyTrades.length > 0 ? (dailyWins.length / dailyTrades.length) * 100 : 0;
+    const dailyWinRate = dailyNonBreakeven > 0 ? (dailyWins.length / dailyNonBreakeven) * 100 : 0;
     const dayAvgWin = dailyWins.length > 0 ? dailyWins.reduce((sum, t) => sum + Number(t.pnl_neto), 0) / dailyWins.length : 0;
     const dayAvgLoss = dailyLosses.length > 0 ? Math.abs(dailyLosses.reduce((sum, t) => sum + Number(t.pnl_neto), 0) / dailyLosses.length) : 0;
 
-    // 3. Streak Logic
+    // 3. Streak Logic (Breakeven trades are skipped - they don't affect streaks)
     let currentStreakCount = 0;
     let currentStreakType: 'win' | 'loss' | 'neutral' = 'neutral';
     let bestStreak = 0;
@@ -140,6 +142,9 @@ export const Dashboard = () => {
 
     let streakVal = 0;
     sortedTrades.forEach(t => {
+      // Skip breakeven trades - they don't affect streaks
+      if (t.pnl_neto === 0) return;
+
       const isWin = t.pnl_neto > 0;
       if (isWin) {
         if (streakVal >= 0) streakVal++;
