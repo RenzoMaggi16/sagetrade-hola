@@ -1,35 +1,22 @@
-import { useState, useEffect, ChangeEvent, FormEvent } from "react"; // Added FormEvent
+import { useState, useEffect, ChangeEvent, FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "sonner"; // Assuming you use sonner for toasts
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Combobox } from "@/components/ui/combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Plus } from "lucide-react";
+import { CalendarIcon, Plus, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AccountFormDialog } from "@/components/AccountFormDialog";
-
-
-// --- Types (Define these properly if you have them elsewhere) ---
-interface Strategy {
-  id: string;
-  name: string;
-}
-interface Rule {
-  id: string;
-  rule_text: string;
-  strategy_id: string;
-}
-// --- End Types ---
+import { useTradingPlan } from "@/hooks/useTradingPlan";
 
 
 // Lista de símbolos predefinidos
@@ -80,20 +67,20 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
 
-  // Estados para estrategias y reglas
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
-  const [brokenRuleIds, setBrokenRuleIds] = useState<string[]>([]);
+  // Estado para evaluación de setup compliance
+  const [setupCompliance, setSetupCompliance] = useState<'full' | 'partial' | 'none'>('full');
+  const [outsidePlanWarning, setOutsidePlanWarning] = useState(false);
+
+  // Trading Plan hook
+  const { plan: tradingPlan } = useTradingPlan();
 
   // Estados unificado para otros campos del formulario
   const [formData, setFormData] = useState({
-    par: "", // Renombrado de simbolo
+    par: "",
     pnl_neto: "",
-    riesgo: "", // Nuevo campo, reemplaza cantidad
-    emocion: "", // Mantenemos emocion en formData pero el selector está separado si se desea
+    riesgo: "",
+    emocion: "",
     trade_type: "buy" as "buy" | "sell",
-    reglas_cumplidas: true, // Legacy field, might not be needed if using brokenRuleIds logic fully
   });
 
   // Estados para URLs de imágenes de gráficos
@@ -115,18 +102,6 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
     setFormData((prev) => ({ ...prev, trade_type: value }));
   };
 
-  const handleCheckboxChange = (checked: boolean | 'indeterminate') => {
-    // Si necesitas hacer algo específico con el checkbox 'reglas_cumplidas'
-    // Aunque ahora se maneja con brokenRuleIds, mantenemos este por si acaso
-    setFormData((prev) => ({ ...prev, reglas_cumplidas: !!checked }));
-  };
-
-  // Handler para checkboxes de reglas rotas
-  const handleRuleCheckboxChange = (ruleId: string, checked: boolean) => {
-    setBrokenRuleIds(prev =>
-      checked ? [...prev, ruleId] : prev.filter(id => id !== ruleId)
-    );
-  };
   // --- Fin Handlers ---
 
   const fetchAccounts = async () => {
@@ -152,54 +127,10 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
     }
   };
 
-  const fetchStrategies = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await (supabase as any)
-      .from('strategies')
-      .select('id, name')
-      .eq('user_id', user.id)
-      .order('name');
-
-    if (error) {
-      console.error("Error fetching strategies:", error);
-    } else {
-      setStrategies((data || []) as any);
-    }
-  };
-
-  const fetchRules = async (strategyId: string) => {
-    if (!strategyId) {
-      setRules([]);
-      return;
-    }
-    const { data, error } = await (supabase as any)
-      .from('rules')
-      .select('id, rule_text, strategy_id')
-      .eq('strategy_id', strategyId);
-
-    if (error) {
-      console.error("Error fetching rules:", error);
-    } else {
-      setRules((data || []) as any);
-    }
-  };
-
-  // Efecto para cargar estrategias y cuentas
+  // Efecto para cargar cuentas
   useEffect(() => {
     fetchAccounts();
-    fetchStrategies();
   }, []);
-
-  // Efecto para cargar reglas cuando cambia la estrategia seleccionada
-  useEffect(() => {
-    if (selectedStrategyId) {
-      fetchRules(selectedStrategyId);
-    } else {
-      setRules([]);
-    }
-  }, [selectedStrategyId]);
 
 
   // Efecto para cargar datos del trade a editar
@@ -213,7 +144,6 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         riesgo: tradeToEdit.riesgo?.toString() || '',
         emocion: tradeToEdit.emocion || '',
         trade_type: tradeToEdit.trade_type || 'buy',
-        reglas_cumplidas: true,
       });
 
       // 2. Rellenar estados separados (Fechas, Notas, Imágenes, Calificación)
@@ -232,23 +162,9 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       // 3. Rellenar Dropdowns
       setSelectedAccountId(tradeToEdit.account_id || null);
 
-      // Strategies & Broken Rules
-      if (tradeToEdit.strategy_id) {
-        setSelectedStrategyId(tradeToEdit.strategy_id);
-        // Fetch broken rules for this trade
-        const fetchBrokenRules = async () => {
-          const { data, error } = await (supabase as any)
-            .from('broken_rules_by_trade')
-            .select('rule_id') // Assuming column name is rule_id based on typical junction table
-            .eq('trade_id', tradeToEdit.id);
-
-          if (!error && data) {
-            // @ts-ignore
-            setBrokenRuleIds(data.map(item => item.rule_id));
-          }
-        };
-        fetchBrokenRules();
-      }
+      // Setup compliance
+      setSetupCompliance(tradeToEdit.setup_compliance || 'full');
+      setOutsidePlanWarning(tradeToEdit.is_outside_plan || false);
 
     } else {
       // Lógica para resetear el formulario si estamos en modo "NUEVO TRADE"
@@ -258,7 +174,6 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         riesgo: '',
         emocion: '',
         trade_type: 'buy',
-        reglas_cumplidas: true
       });
       setTradeDate(new Date());
       setEntryTimeString('09:00:00');
@@ -269,8 +184,8 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       setImageUrlM1('');
       setImageUrlM5('');
       setImageUrlM15('');
-      setSelectedStrategyId(null);
-      setBrokenRuleIds([]);
+      setSetupCompliance('full');
+      setOutsidePlanWarning(false);
 
       // Auto-seleccionar cuenta si hay cuentas disponibles
       if (accounts.length > 0) {
@@ -315,13 +230,87 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       }
 
       // Objeto de datos comunes (lo que se va a guardar)
+      const pnlValue = formData.pnl_neto === "" ? 0 : parseFloat(formData.pnl_neto);
+      const riesgoValue = parseFloat(formData.riesgo) || null;
+
+      // --- Validación contra Trading Plan ---
+      let isOutsidePlan = setupCompliance !== 'full';
+
+      try {
+        const { data: planData } = await (supabase as any)
+          .from("trading_plans")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (planData) {
+          // Check max_trades_per_day
+          if (planData.max_trades_per_day != null && !tradeToEdit) {
+            const todayStr = entryTimestamp.toISOString().split('T')[0];
+            const { count } = await supabase
+              .from("trades")
+              .select("*", { count: "exact", head: true })
+              .eq("user_id", user.id)
+              .gte("entry_time", todayStr + "T00:00:00")
+              .lte("entry_time", todayStr + "T23:59:59");
+
+            if ((count || 0) >= planData.max_trades_per_day) {
+              isOutsidePlan = true;
+            }
+          }
+
+          // Check min_rr
+          if (planData.min_rr != null && riesgoValue && riesgoValue > 0) {
+            const rr = pnlValue / riesgoValue;
+            if (rr < planData.min_rr && pnlValue > 0) {
+              isOutsidePlan = true;
+            }
+          }
+
+          // Check risk_per_trade (percentage-based)
+          if (planData.risk_per_trade != null && riesgoValue && riesgoValue > 0) {
+            // Get account initial capital to calculate percentage
+            const acct = await supabase
+              .from('accounts')
+              .select('initial_capital')
+              .eq('id', selectedAccountId)
+              .single();
+            if (acct.data && acct.data.initial_capital > 0) {
+              const riskPct = (riesgoValue / acct.data.initial_capital) * 100;
+              if (riskPct > planData.risk_per_trade) {
+                isOutsidePlan = true;
+              }
+            }
+          }
+
+          // Check stop_after_consecutive_losses
+          if (planData.stop_after_consecutive_losses != null && !tradeToEdit) {
+            const { data: recentTrades } = await supabase
+              .from("trades")
+              .select("pnl_neto")
+              .eq("user_id", user.id)
+              .order("entry_time", { ascending: false })
+              .limit(planData.stop_after_consecutive_losses);
+
+            if (recentTrades && recentTrades.length >= planData.stop_after_consecutive_losses) {
+              const allLosses = recentTrades.every((t: any) => t.pnl_neto < 0);
+              if (allLosses) {
+                isOutsidePlan = true;
+              }
+            }
+          }
+        }
+      } catch (planError) {
+        console.error("Error validating against trading plan:", planError);
+      }
+
       const tradeDataObject = {
         user_id: user.id,
         account_id: selectedAccountId,
-        strategy_id: selectedStrategyId || null,
+        strategy_id: null,
         par: formData.par.toUpperCase() || null,
-        pnl_neto: formData.pnl_neto === "" ? 0 : parseFloat(formData.pnl_neto),
-        riesgo: parseFloat(formData.riesgo) || null,
+        pnl_neto: pnlValue,
+        riesgo: riesgoValue,
         trade_type: formData.trade_type,
         emocion: formData.emocion || null,
         setup_rating: setupRating || null,
@@ -332,6 +321,8 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         image_url_m1: imageUrlM1?.trim() || null,
         image_url_m5: imageUrlM5?.trim() || null,
         image_url_m15: imageUrlM15?.trim() || null,
+        is_outside_plan: isOutsidePlan,
+        setup_compliance: setupCompliance,
       };
 
       let tradeId: string | number; // Para guardar el ID del trade
@@ -348,32 +339,6 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         if (updateError) throw updateError;
         tradeId = updatedTrade.id;
 
-        // 2. Gestionar Broken Rules
-        // a. Borrar existentes
-        const { error: deleteRulesError } = await (supabase as any)
-          .from('broken_rules_by_trade')
-          .delete()
-          .eq('trade_id', tradeId);
-
-        if (deleteRulesError) console.error("Error cleaning up old rules", deleteRulesError);
-
-        // b. Insertar nuevas
-        if (brokenRuleIds.length > 0) {
-          const rulesToInsert = brokenRuleIds.map(ruleId => ({
-            trade_id: tradeId,
-            rule_id: ruleId,
-            user_id: user.id
-          }));
-
-          const { error: insertRulesError } = await (supabase as any)
-            .from('broken_rules_by_trade')
-            .insert(rulesToInsert);
-
-          if (insertRulesError) {
-            console.error("Error inserting broken rules", insertRulesError);
-            toast.error("Error al guardar reglas rotas: " + insertRulesError.message);
-          }
-        }
 
         toast.success("Trade actualizado con éxito");
 
@@ -390,23 +355,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
 
         tradeId = newTrade.id;
 
-        // Broken Rules Insertion for NEW Trade
-        if (brokenRuleIds.length > 0) {
-          const rulesToInsert = brokenRuleIds.map(ruleId => ({
-            trade_id: tradeId,
-            rule_id: ruleId,
-            user_id: user.id
-          }));
 
-          const { error: insertRulesError } = await (supabase as any)
-            .from('broken_rules_by_trade')
-            .insert(rulesToInsert);
-
-          if (insertRulesError) {
-            console.error("Error inserting broken rules", insertRulesError);
-            toast.error("Error al guardar reglas rotas: " + insertRulesError.message);
-          }
-        }
 
         // Actualizar Current Capital de la cuenta
         const { data: accountData, error: accountError } = await supabase
@@ -449,7 +398,6 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
           riesgo: "",
           emocion: "",
           trade_type: "buy",
-          reglas_cumplidas: true,
         });
         setTradeDate(new Date());
         setEntryTimeString('09:00:00');
@@ -460,8 +408,8 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         setImageUrlM1('');
         setImageUrlM5('');
         setImageUrlM15('');
-        setSelectedStrategyId(null);
-        setBrokenRuleIds([]);
+        setSetupCompliance('full');
+        setOutsidePlanWarning(false);
 
         // Mantener la cuenta seleccionada o seleccionar la primera
         if (accounts.length > 0) {
@@ -603,48 +551,54 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
             </div>
           </div>
 
-          {/* Fila Estrategia */}
-          <div className="space-y-2">
-            <Label htmlFor="strategy-select">Estrategia</Label>
-            <Select
-              value={selectedStrategyId || "none"}
-              onValueChange={(value) => setSelectedStrategyId(value === "none" ? null : value)}
-            >
-              <SelectTrigger id="strategy-select">
-                <SelectValue placeholder="Seleccionar estrategia..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Ninguna</SelectItem>
-                {strategies.map((strategy) => (
-                  <SelectItem key={strategy.id} value={strategy.id}>
-                    {strategy.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Reglas de la Estrategia (Solo si hay estrategia seleccionada) */}
-          {selectedStrategyId && rules.length > 0 && (
-            <div className="space-y-3 p-4 border rounded-md bg-muted/20">
-              <Label className="text-base font-semibold text-destructive">Reglas Rotas (Marcar las que NO se cumplieron)</Label>
-              <div className="grid grid-cols-1 gap-2">
-                {rules.map((rule) => (
-                  <div key={rule.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`rule-${rule.id}`}
-                      checked={brokenRuleIds.includes(rule.id)}
-                      onCheckedChange={(checked) => handleRuleCheckboxChange(rule.id, !!checked)}
-                    />
-                    <label
-                      htmlFor={`rule-${rule.id}`}
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                    >
-                      {rule.rule_text}
-                    </label>
-                  </div>
-                ))}
+          {/* Evaluación del Setup */}
+          {tradingPlan && (
+            <div className="space-y-3 p-4 border rounded-md bg-muted/10">
+              <div className="flex items-center gap-2">
+                <Label className="text-base font-semibold">🧠 Evaluación del Setup</Label>
               </div>
+              {tradingPlan.setup_rules?.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Setup principal: <span className="font-medium text-foreground">{tradingPlan.setup_rules[0].name}</span>
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground">¿Este trade cumple tu Setup Principal?</p>
+              <RadioGroup
+                value={setupCompliance}
+                onValueChange={(value) => {
+                  setSetupCompliance(value as 'full' | 'partial' | 'none');
+                  setOutsidePlanWarning(value !== 'full');
+                }}
+                className="space-y-2"
+              >
+                <div className="flex items-center space-x-3 p-2 rounded-md hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="full" id="setup-full" />
+                  <Label htmlFor="setup-full" className="cursor-pointer flex-1">
+                    <span className="text-profit font-medium">✔️ Sí, cumple completamente</span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-3 p-2 rounded-md hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="partial" id="setup-partial" />
+                  <Label htmlFor="setup-partial" className="cursor-pointer flex-1">
+                    <span className="text-yellow-400 font-medium">⚠️ Parcialmente</span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-3 p-2 rounded-md hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="none" id="setup-none" />
+                  <Label htmlFor="setup-none" className="cursor-pointer flex-1">
+                    <span className="text-loss font-medium">❌ No cumple</span>
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {outsidePlanWarning && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30 mt-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0" />
+                  <p className="text-sm text-yellow-200">
+                    Estás registrando un trade fuera de tu plan de trading.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

@@ -12,6 +12,11 @@ import { StreakStats } from "./dashboard/StreakStats";
 import { TradeCountChart } from "./dashboard/TradeCountChart";
 import { ProfitFactorChart } from "./dashboard/ProfitFactorChart";
 import { DailyPerformanceStats } from "@/components/DailyPerformanceStats";
+import { TradingPlanCard } from "./dashboard/TradingPlanCard";
+import { TradingPlanEditModal } from "./dashboard/TradingPlanEditModal";
+import { DisciplineCard } from "./dashboard/DisciplineCard";
+import { useTradingPlan } from "@/hooks/useTradingPlan";
+import { useDisciplineMetrics } from "@/hooks/useDisciplineMetrics";
 import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -25,7 +30,8 @@ interface Trade {
   par: string;
   reglas_cumplidas?: boolean;
   emocion?: string;
-  account_id: string; // Ensure we have this for debugging if needed, though we filter in query
+  account_id: string;
+  is_outside_plan?: boolean;
 }
 
 interface Account {
@@ -42,6 +48,10 @@ export const Dashboard = () => {
     const saved = localStorage.getItem('calendar-display-mode');
     return (saved === 'percentage' ? 'percentage' : 'dollars') as CalendarDisplayMode;
   });
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  // Trading Plan hook
+  const { plan, isLoading: isLoadingPlan, savePlan, isSaving } = useTradingPlan();
 
   const handleDisplayModeChange = (mode: CalendarDisplayMode) => {
     setDisplayMode(mode);
@@ -328,6 +338,11 @@ export const Dashboard = () => {
     if (accounts.length === 0) return <div className="p-4">No accounts found. Create one to get started.</div>;
   }
 
+  // Discipline metrics
+  const disciplineMetrics = useDisciplineMetrics(
+    trades.map(t => ({ id: t.id, pnl_neto: t.pnl_neto, entry_time: t.entry_time, is_outside_plan: t.is_outside_plan }))
+  );
+
   return (
     <div className="space-y-4">
       <DashboardHeader
@@ -340,124 +355,151 @@ export const Dashboard = () => {
         setDisplayMode={handleDisplayModeChange}
       />
 
-      {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Winrate Card */}
-        <StatCard title="Winrate" value={`${metrics?.winRate.toFixed(2) || '0.00'}%`}>
-          <div className="h-[60px] flex items-center justify-center mt-2">
-            <WinRateDonutChart
-              wins={trades.filter(t => t.pnl_neto > 0).length}
-              losses={trades.filter(t => t.pnl_neto <= 0).length}
-              breakeven={0}
-              hideLegend
-            />
-          </div>
-        </StatCard>
-
-        {/* Ratio Card */}
-        <StatCard title="Promedio de victorias / Promedio de derrotas" value={metrics?.ratio.toFixed(2) || '0.00'}>
-          <WinLossRatioBar
-            winValue={metrics?.avgWin || 0}
-            lossValue={metrics?.avgLoss || 0}
-            label="Average RR"
-            className="mt-4"
-          />
-        </StatCard>
-
-        {/* Trade Count Card */}
-        <StatCard title="Número total de operaciones" value={metrics?.totalTrades || 0}>
-          <div className="mt-2 text-xs text-muted-foreground flex justify-between mb-1">
-            <span>{dateRange ? 'Inicio' : ''}</span>
-            <span>{dateRange ? 'Rango' : ''}</span>
-            <span>{dateRange ? 'Fin' : ''}</span>
-          </div>
-          <TradeCountChart data={metrics?.countChartData || []} />
-        </StatCard>
-
-        {/* Winstreak Card */}
-        <StatCard title="Racha">
-          <StreakStats
-            currentStreak={metrics?.currentStreakCount || 0}
-            bestStreak={metrics?.bestStreak || 0}
-            worstStreak={metrics?.worstStreak || 0}
-            type={metrics?.currentStreakType || 'neutral'}
-          />
-        </StatCard>
-      </div>
-
-      {/* Main Grid: Left Stats + Right Calendar */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Left Column */}
-        <div className="col-span-1 flex flex-col gap-4">
-          {/* Profit Factor Card */}
-          <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>
-            <div className="flex items-center justify-center mt-3 gap-4">
-              {/* Gross Profit */}
-              <div className="text-sm font-bold text-profit">
-                ${metrics?.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
-              </div>
-
-              {/* Chart */}
-              <div className="h-14 w-14">
-                <ProfitFactorChart
-                  grossProfit={metrics?.grossProfit || 0}
-                  grossLoss={metrics?.grossLoss || 0}
+      {/* Main Flex Layout: Metrics (left) + Trading Plan (right) */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* Left Column: All existing dashboard content */}
+        <div className="flex-1 min-w-0 space-y-4">
+          {/* KPI Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {/* Winrate Card */}
+            <StatCard title="Winrate" value={`${metrics?.winRate.toFixed(2) || '0.00'}%`}>
+              <div className="h-[60px] flex items-center justify-center mt-2">
+                <WinRateDonutChart
+                  wins={trades.filter(t => t.pnl_neto > 0).length}
+                  losses={trades.filter(t => t.pnl_neto <= 0).length}
+                  breakeven={0}
+                  hideLegend
                 />
               </div>
+            </StatCard>
 
-              {/* Gross Loss */}
-              <div className="text-sm font-bold text-loss">
-                -${metrics?.grossLoss.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+            {/* Ratio Card */}
+            <StatCard title="Promedio de victorias / Promedio de derrotas" value={metrics?.ratio.toFixed(2) || '0.00'}>
+              <WinLossRatioBar
+                winValue={metrics?.avgWin || 0}
+                lossValue={metrics?.avgLoss || 0}
+                label="Average RR"
+                className="mt-4"
+              />
+            </StatCard>
+
+            {/* Trade Count Card */}
+            <StatCard title="Número total de operaciones" value={metrics?.totalTrades || 0}>
+              <div className="mt-2 text-xs text-muted-foreground flex justify-between mb-1">
+                <span>{dateRange ? 'Inicio' : ''}</span>
+                <span>{dateRange ? 'Rango' : ''}</span>
+                <span>{dateRange ? 'Fin' : ''}</span>
+              </div>
+              <TradeCountChart data={metrics?.countChartData || []} />
+            </StatCard>
+
+            {/* Winstreak Card */}
+            <StatCard title="Racha">
+              <StreakStats
+                currentStreak={metrics?.currentStreakCount || 0}
+                bestStreak={metrics?.bestStreak || 0}
+                worstStreak={metrics?.worstStreak || 0}
+                type={metrics?.currentStreakType || 'neutral'}
+              />
+            </StatCard>
+          </div>
+
+          {/* Main Grid: Left Stats + Right Calendar */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Left Column */}
+            <div className="col-span-1 flex flex-col gap-4">
+              {/* Profit Factor Card */}
+              <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>
+                <div className="flex items-center justify-center mt-3 gap-4">
+                  {/* Gross Profit */}
+                  <div className="text-sm font-bold text-profit">
+                    ${metrics?.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                  </div>
+
+                  {/* Chart */}
+                  <div className="h-14 w-14">
+                    <ProfitFactorChart
+                      grossProfit={metrics?.grossProfit || 0}
+                      grossLoss={metrics?.grossLoss || 0}
+                    />
+                  </div>
+
+                  {/* Gross Loss */}
+                  <div className="text-sm font-bold text-loss">
+                    -${metrics?.grossLoss.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                  </div>
+                </div>
+              </StatCard>
+
+              {/* Best Day Card */}
+              <StatCard title="Mejor Día">
+                <div className="flex items-center justify-between">
+                  <div className="text-3xl font-bold capitalize text-white">
+                    {metrics?.bestDayIndex !== -1 ? metrics?.bestDayName : "N/A"}
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-2xl font-bold ${metrics?.bestDayPercentage > 0 ? "text-profit" : "text-muted-foreground"}`}>
+                      {metrics?.bestDayPercentage > 0 ? "+" : ""}{metrics?.bestDayPercentage?.toFixed(2) || "0.00"}%
+                    </span>
+                    <span className="text-base font-medium text-muted-foreground">
+                      ${metrics?.bestDayProfit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                    </span>
+                  </div>
+                </div>
+              </StatCard>
+
+              {/* Balance Filtered */}
+              <StatCard title="Balance" value={
+                displayMode === 'percentage' && (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0) > 0
+                  ? `${(((currentBalance - (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0)) / (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1)) * 100).toFixed(2)}%`
+                  : `$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+              } className="flex-grow flex flex-col">
+                <div className="flex-grow min-h-[150px]">
+                  <EquityChart data={equityCurveData.map(d => ({ date: d.date, cumulativePnl: d.cumulativePnl }))} />
+                </div>
+              </StatCard>
+            </div>
+
+            {/* Right Column: Calendar */}
+            <div className="col-span-1 md:col-span-3">
+              <PnLCalendar
+                trades={trades}
+                displayMode={displayMode}
+                initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
+              />
+              <div className="mt-4">
+                <DailyPerformanceStats
+                  trades={trades}
+                  displayMode={displayMode}
+                  initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
+                />
               </div>
             </div>
-          </StatCard>
-
-          {/* Best Day Card */}
-          <StatCard title="Mejor Día">
-            <div className="flex items-center justify-between">
-              <div className="text-3xl font-bold capitalize text-white">
-                {metrics?.bestDayIndex !== -1 ? metrics?.bestDayName : "N/A"}
-              </div>
-              <div className="flex flex-col items-end">
-                <span className={`text-2xl font-bold ${metrics?.bestDayPercentage > 0 ? "text-profit" : "text-muted-foreground"}`}>
-                  {metrics?.bestDayPercentage > 0 ? "+" : ""}{metrics?.bestDayPercentage?.toFixed(2) || "0.00"}%
-                </span>
-                <span className="text-base font-medium text-muted-foreground">
-                  ${metrics?.bestDayProfit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
-                </span>
-              </div>
-            </div>
-          </StatCard>
-
-          {/* Balance Filtered */}
-          <StatCard title="Balance" value={
-            displayMode === 'percentage' && (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0) > 0
-              ? `${(((currentBalance - (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0)) / (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1)) * 100).toFixed(2)}%`
-              : `$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-          } className="flex-grow flex flex-col">
-            <div className="flex-grow min-h-[150px]">
-              {/* Pass simply cumulativePnl for now to keep chart logic simple, or update EquityChart to take absolute balance */}
-              <EquityChart data={equityCurveData.map(d => ({ date: d.date, cumulativePnl: d.cumulativePnl }))} />
-            </div>
-          </StatCard>
-        </div>
-
-        {/* Right Column: Calendar */}
-        <div className="col-span-1 md:col-span-3">
-          <PnLCalendar
-            trades={trades}
-            displayMode={displayMode}
-            initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
-          />
-          <div className="mt-4">
-            <DailyPerformanceStats
-              trades={trades}
-              displayMode={displayMode}
-              initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
-            />
           </div>
         </div>
+
+        {/* Right Column: Trading Plan Sidebar */}
+        <div className="w-full lg:w-[320px] xl:w-[360px] shrink-0 space-y-4">
+          <TradingPlanCard
+            plan={plan}
+            isLoading={isLoadingPlan}
+            onEdit={() => setIsPlanModalOpen(true)}
+          />
+          <DisciplineCard
+            metrics={disciplineMetrics}
+            hasPlan={!!plan}
+          />
+        </div>
       </div>
+
+      {/* Trading Plan Edit Modal */}
+      <TradingPlanEditModal
+        open={isPlanModalOpen}
+        onOpenChange={setIsPlanModalOpen}
+        plan={plan}
+        onSave={savePlan}
+        isSaving={isSaving}
+      />
     </div>
   );
 };
