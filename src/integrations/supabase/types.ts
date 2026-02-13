@@ -1,4 +1,4 @@
-    export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -100,6 +100,7 @@ export type Database = {
           post_trade_notes: string | null
           strategy_id: string | null
           is_outside_plan: boolean
+          setup_compliance: string | null
           created_at: string | null
         }
         Insert: {
@@ -118,6 +119,7 @@ export type Database = {
           post_trade_notes?: string | null
           strategy_id?: string | null
           is_outside_plan?: boolean
+          setup_compliance?: string | null
           created_at?: string | null
         }
         Update: {
@@ -136,6 +138,7 @@ export type Database = {
           post_trade_notes?: string | null
           strategy_id?: string | null
           is_outside_plan?: boolean
+          setup_compliance?: string | null
           created_at?: string | null
         }
         Relationships: []

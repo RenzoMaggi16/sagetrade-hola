@@ -11,8 +11,9 @@ import MisReglas from "./pages/MisReglas";
 import ManageStrategies from "./pages/ManageStrategies";
 import ManageAccounts from "./pages/ManageAccounts";
 import ReportBuilder from "./pages/ReportBuilder";
-import StrategySelectionPage from "./pages/StrategySelectionPage";
+
 import StrategyReport from "./pages/StrategyReport";
+import TradingPlanReport from "./pages/TradingPlanReport";
 import Settings from "./pages/Settings";
 import TradesPage from "./pages/TradesPage";
 import { ThemeProvider } from "./context/ThemeProvider";
@@ -35,9 +36,9 @@ const App = () => (
               <Route path="/analisis" element={<AnalisisIA />} />
               <Route path="/reglas" element={<MisReglas />} />
               <Route path="/estrategias" element={<ManageStrategies />} />
-              <Route path="/reporte-estrategia/:strategyId" element={<StrategyReport />} />
+
               <Route path="/cuentas" element={<ManageAccounts />} />
-              <Route path="/reportes" element={<StrategySelectionPage />} />
+              <Route path="/reportes" element={<TradingPlanReport />} />
               <Route path="/configuracion" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

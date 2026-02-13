@@ -17,6 +17,7 @@ import { TradingPlanEditModal } from "./dashboard/TradingPlanEditModal";
 import { DisciplineCard } from "./dashboard/DisciplineCard";
 import { useTradingPlan } from "@/hooks/useTradingPlan";
 import { useDisciplineMetrics } from "@/hooks/useDisciplineMetrics";
+import { DailyPsychologyQuote } from "@/components/dashboard/DailyPsychologyQuote";
 import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -28,7 +29,6 @@ interface Trade {
   pnl_neto: number;
   entry_time: string;
   par: string;
-  reglas_cumplidas?: boolean;
   emocion?: string;
   account_id: string;
   is_outside_plan?: boolean;
@@ -354,6 +354,8 @@ export const Dashboard = () => {
         displayMode={displayMode}
         setDisplayMode={handleDisplayModeChange}
       />
+
+      <DailyPsychologyQuote />
 
       {/* Main Flex Layout: Metrics (left) + Trading Plan (right) */}
       <div className="flex flex-col lg:flex-row gap-4">

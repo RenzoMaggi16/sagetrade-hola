@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, CheckCircle, AlertTriangle, XCircle, Ban } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,22 +25,13 @@ interface Trade {
   exit_time: string;
   pre_trade_notes: string | null;
   post_trade_notes: string | null;
-  strategy_id: string | null;
   image_url_m1: string | null;
   image_url_m5: string | null;
   image_url_m15: string | null;
+  is_outside_plan: boolean;
+  setup_compliance: 'full' | 'partial' | 'none' | null;
   accounts?: {
     account_name: string;
-  };
-  strategies?: {
-    name: string;
-  };
-}
-
-interface BrokenRule {
-  rules: {
-    id: string;
-    rule_text: string;
   };
 }
 
@@ -61,7 +52,7 @@ const InfoCard = ({ title, value, isProfit = false, isLoss = false }: {
 
 // Componente auxiliar para mostrar notas
 const NotesBox = ({ title, notes }: { title: string; notes: string | null }) => (
-  <div className="bg-neutral-800 p-4 rounded-lg">
+  <div className="bg-neutral-800 p-4 rounded-lg h-full">
     <h4 className="text-md font-semibold text-neutral-300 mb-2">{title}</h4>
     <p className="text-sm text-neutral-100 whitespace-pre-wrap">{notes || 'Sin notas.'}</p>
   </div>
@@ -88,8 +79,6 @@ const TradeDetail = () => {
   const params = useParams();
   const id = params.id;
   const [trade, setTrade] = useState<Trade | null>(null);
-  const [brokenRules, setBrokenRules] = useState<BrokenRule[]>([]);
-  const [allRulesForStrategy, setAllRulesForStrategy] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
@@ -107,51 +96,13 @@ const TradeDetail = () => {
         .from('trades')
         .select(`
           *, 
-          accounts(account_name), 
-          strategies(name)
+          accounts(account_name)
         `)
         .eq('id', id)
         .single();
 
       if (tradeError) throw tradeError;
-      setTrade(tradeData as Trade);
-
-      // 2. Obtener TODAS las reglas de la estrategia
-      let allRules: any[] = [];
-      if (tradeData.strategy_id) {
-        const { data: rules, error: allRulesError } = await (supabase as any)
-          .from('rules')
-          .select('id, rule_text')
-          .eq('strategy_id', tradeData.strategy_id);
-
-        if (allRulesError) throw allRulesError;
-        allRules = rules || [];
-        setAllRulesForStrategy(allRules);
-      } else {
-        setAllRulesForStrategy([]);
-      }
-
-      // 3. Obtener las reglas ROTAS (Fetch IDs directamente para evitar problemas de join)
-      const { data: brokenData, error: brokenError } = await (supabase as any)
-        .from('broken_rules_by_trade')
-        .select('rule_id')
-        .eq('trade_id', id);
-
-      if (brokenError) throw brokenError;
-
-      const brokenIds = (brokenData || []).map((item: any) => item.rule_id);
-
-      // Reconstruir el objeto de reglas rotas coincidiendo con allRules
-      const brokenRulesMapped = allRules
-        .filter(rule => brokenIds.includes(rule.id))
-        .map(rule => ({
-          rules: {
-            id: rule.id,
-            rule_text: rule.rule_text
-          }
-        }));
-
-      setBrokenRules(brokenRulesMapped as BrokenRule[]);
+      setTrade(tradeData as unknown as Trade);
 
     } catch (error: any) {
       console.error("Error fetching trade details:", error);
@@ -216,11 +167,17 @@ const TradeDetail = () => {
     calculatedRR = `1 : ${(pnl / risk).toFixed(2)}`;
   }
 
-  // Calcular reglas cumplidas
-  const brokenRuleIds = brokenRules.map(br => br.rules?.id).filter(Boolean);
-  const compliedRules = allRulesForStrategy.filter(rule =>
-    !brokenRuleIds.includes(rule.id)
-  );
+  // Helpers para Setup Compliance
+  const getComplianceInfo = (status: string | null) => {
+    switch (status) {
+      case 'full': return { text: 'Cumple completamente', icon: <CheckCircle className="h-5 w-5 text-green-500" />, color: 'text-green-500' };
+      case 'partial': return { text: 'Cumple parcialmente', icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />, color: 'text-yellow-500' };
+      case 'none': return { text: 'No cumple', icon: <XCircle className="h-5 w-5 text-red-500" />, color: 'text-red-500' };
+      default: return { text: 'No especificado', icon: <AlertTriangle className="h-5 w-5 text-muted-foreground" />, color: 'text-muted-foreground' };
+    }
+  };
+
+  const complianceInfo = getComplianceInfo(trade.setup_compliance);
 
   return (
     <div className="min-h-screen bg-background">
@@ -298,66 +255,62 @@ const TradeDetail = () => {
                 title="Calificación Setup"
                 value={trade.setup_rating || 'N/A'}
               />
-              <InfoCard
-                title="Estrategia"
-                value={trade.strategies?.name || 'N/A'}
-              />
             </div>
 
-            {/* Sección de Análisis y Reglas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              {/* Notas */}
-              <div className="space-y-4">
-                <NotesBox
-                  title="Análisis Pre-Trade"
-                  notes={trade.pre_trade_notes}
-                />
-                <NotesBox
-                  title="Reflexión Post-Trade"
-                  notes={trade.post_trade_notes}
-                />
+            {/* 🧠 Evaluación del Plan */}
+            <div className={`mt-6 p-4 rounded-lg border flex flex-col gap-4 ${!trade.is_outside_plan
+              ? 'bg-green-500/10 border-green-500/30'
+              : 'bg-red-500/10 border-red-500/30'
+              }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-lg font-semibold">🧠 Evaluación del Plan</h3>
               </div>
 
-              {/* Reglas */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Análisis de Reglas</h3>
-                <div className="p-4 bg-neutral-800 rounded-lg shadow-inner min-h-[100px]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Cumplimiento del Setup */}
+                <div className="flex items-center gap-3">
+                  {complianceInfo.icon}
+                  <div>
+                    <h4 className="text-sm text-muted-foreground font-medium">Cumplimiento del Setup</h4>
+                    <p className={`font-bold ${complianceInfo.color}`}>{complianceInfo.text}</p>
+                  </div>
+                </div>
 
-                  {/* Lista de Reglas Cumplidas */}
-                  {compliedRules.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-green-500 font-semibold mb-3">Reglas Cumplidas:</p>
-                      <ul className="list-disc list-inside space-y-2">
-                        {compliedRules.map((rule: any) => (
-                          <li key={rule.id} className="text-neutral-100">
-                            {rule.rule_text}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                {/* Estado del Plan */}
+                <div className="flex items-center gap-3">
+                  {!trade.is_outside_plan ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <Ban className="h-5 w-5 text-red-500" />
                   )}
-
-                  {/* Lista de Reglas Rotas */}
-                  {brokenRules.length > 0 && (
-                    <div>
-                      <p className="text-red-500 font-semibold mb-3">Reglas Rotas:</p>
-                      <ul className="list-disc list-inside space-y-2">
-                        {brokenRules.map((br: BrokenRule, index: number) => (
-                          <li key={index} className="text-neutral-100">
-                            {br.rules?.rule_text || 'Regla sin texto'}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Caso donde no hay reglas */}
-                  {allRulesForStrategy.length === 0 && (
-                    <p className="text-neutral-400">Esta estrategia no tiene reglas definidas.</p>
-                  )}
-
+                  <div>
+                    <h4 className="text-sm text-muted-foreground font-medium">Estado del Plan</h4>
+                    {!trade.is_outside_plan ? (
+                      <p className="font-bold text-green-500">🟢 Dentro del plan</p>
+                    ) : (
+                      <div className="flex flex-col">
+                        <p className="font-bold text-red-500">🔴 Fuera del plan</p>
+                        <p className="text-xs text-red-400 mt-1">
+                          Este trade rompió alguna regla de tu plan (RR, riesgo, límite diario o pérdidas consecutivas).
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+            </div>
+
+
+            {/* Sección de Notas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              <NotesBox
+                title="Análisis Pre-Trade"
+                notes={trade.pre_trade_notes}
+              />
+              <NotesBox
+                title="Reflexión Post-Trade"
+                notes={trade.post_trade_notes}
+              />
             </div>
 
             {/* --- Sección de Imágenes (M1, M5, M15) --- */}

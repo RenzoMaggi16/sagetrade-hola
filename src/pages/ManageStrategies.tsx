@@ -438,12 +438,7 @@ export default function ManageStrategies() {
                           >
                             {strategy.name}
                           </span>
-                          <Link to={`/reporte-estrategia/${strategy.id}`}>
-                            <Button variant="outline" size="sm">
-                              <LineChart className="h-4 w-4 mr-1" />
-                              Reporte
-                            </Button>
-                          </Link>
+
                         </div>
                       </div>
                     ))}
