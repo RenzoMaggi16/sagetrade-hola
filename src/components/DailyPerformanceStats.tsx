@@ -54,7 +54,7 @@ export function DailyPerformanceStats({ trades, displayMode = 'dollars', initial
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="flex flex-col">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-                    <CardTitle className="text-sm font-medium">Ganancia Promedio Diaria</CardTitle>
+                    <CardTitle className="text-sm font-large">Ganancia Promedio Diaria</CardTitle>
                     <TrendingUp className="h-5 w-5 text-profit-custom" />
                 </CardHeader>
                 <CardContent className="flex-1 flex items-center py-10">
@@ -69,7 +69,7 @@ export function DailyPerformanceStats({ trades, displayMode = 'dollars', initial
 
             <Card className="flex flex-col">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-                    <CardTitle className="text-sm font-medium">Pérdida Promedio Diaria</CardTitle>
+                    <CardTitle className="text-sm font-large">Pérdida Promedio Diaria</CardTitle>
                     <TrendingDown className="h-5 w-5 text-loss-custom" />
                 </CardHeader>
                 <CardContent className="flex-1 flex items-center py-10">

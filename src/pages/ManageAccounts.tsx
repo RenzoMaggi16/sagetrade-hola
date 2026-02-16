@@ -176,13 +176,12 @@ const ManageAccounts = () => {
         return;
       }
 
-      const accountData = {
-        user_id: user.id,
+      // Datos comunes del formulario (sin user_id)
+      const formFields = {
         account_name: formData.account_name.trim(),
-        account_type: formData.account_type, // Guardar el valor directamente sin mapeo
+        account_type: formData.account_type,
         asset_class: formData.asset_class,
         initial_capital: formData.initial_capital,
-        current_capital: editingAccount ? editingAccount.current_capital : formData.initial_capital,
         funding_company: formData.account_type !== 'personal'
           ? formData.funding_company.trim() || null
           : null,
@@ -198,15 +197,21 @@ const ManageAccounts = () => {
         drawdown_type: formData.drawdown_type,
         drawdown_amount: formData.drawdown_amount > 0 ? formData.drawdown_amount : null,
         profit_target: formData.profit_target > 0 ? formData.profit_target : null,
-        highest_balance: editingAccount ? editingAccount.highest_balance : formData.initial_capital,
       };
 
       if (editingAccount) {
-        // Actualizar cuenta existente
+        // Actualizar cuenta existente — NO incluir user_id en el payload de update
+        const updateData = {
+          ...formFields,
+          current_capital: editingAccount.current_capital,
+          highest_balance: editingAccount.highest_balance,
+        };
+
         const { error } = await supabase
           .from('accounts')
-          .update(accountData)
-          .eq('id', editingAccount.id);
+          .update(updateData)
+          .eq('id', editingAccount.id)
+          .eq('user_id', user.id);
 
         if (error) {
           console.error('Error updating account:', error);
@@ -216,10 +221,17 @@ const ManageAccounts = () => {
 
         toast.success("Cuenta actualizada correctamente");
       } else {
-        // Crear nueva cuenta
+        // Crear nueva cuenta — incluir user_id y valores iniciales
+        const insertData = {
+          ...formFields,
+          user_id: user.id,
+          current_capital: formData.initial_capital,
+          highest_balance: formData.initial_capital,
+        };
+
         const { error } = await supabase
           .from('accounts')
-          .insert(accountData);
+          .insert(insertData);
 
         if (error) {
           console.error('Error creating account:', error);

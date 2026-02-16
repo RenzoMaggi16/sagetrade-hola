@@ -1,3 +1,4 @@
+import { useState, useEffect, useId } from "react";
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 
 interface TradeCountChartProps {
@@ -5,15 +6,35 @@ interface TradeCountChartProps {
 }
 
 export const TradeCountChart = ({ data }: TradeCountChartProps) => {
+    const uniqueId = useId().replace(/:/g, '');
+    const gradientId = `colorCount-${uniqueId}`;
+
+    const [chartColor, setChartColor] = useState(() => {
+        if (typeof window === 'undefined') return '#03fffe';
+        return getComputedStyle(document.documentElement).getPropertyValue('--chart-color').trim() || '#03fffe';
+    });
+
+    useEffect(() => {
+        const root = document.documentElement;
+        const update = () => {
+            const color = getComputedStyle(root).getPropertyValue('--chart-color').trim();
+            if (color) setChartColor(color);
+        };
+        update();
+        const observer = new MutationObserver(update);
+        observer.observe(root, { attributes: true, attributeFilter: ['style'] });
+        return () => observer.disconnect();
+    }, []);
+
     return (
         <div className="h-[80px] w-full">
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                     <defs>
-                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#03fffe" stopOpacity={0.5} />
-                            <stop offset="50%" stopColor="#03fffe" stopOpacity={0.2} />
-                            <stop offset="100%" stopColor="#03fffe" stopOpacity={0} />
+                        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={chartColor} stopOpacity={0.5} />
+                            <stop offset="50%" stopColor={chartColor} stopOpacity={0.2} />
+                            <stop offset="100%" stopColor={chartColor} stopOpacity={0} />
                         </linearGradient>
                     </defs>
                     <XAxis dataKey="date" hide />
@@ -34,12 +55,12 @@ export const TradeCountChart = ({ data }: TradeCountChartProps) => {
                     <Area
                         type="basis"
                         dataKey="count"
-                        stroke="#03fffe"
+                        stroke={chartColor}
                         strokeWidth={2.5}
                         fillOpacity={1}
-                        fill="url(#colorCount)"
+                        fill={`url(#${gradientId})`}
                         dot={false}
-                        activeDot={{ r: 4, fill: '#03fffe', stroke: '#fff', strokeWidth: 2 }}
+                        activeDot={{ r: 4, fill: chartColor, stroke: '#fff', strokeWidth: 2 }}
                     />
                 </AreaChart>
             </ResponsiveContainer>

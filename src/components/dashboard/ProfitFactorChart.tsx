@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 interface ProfitFactorChartProps {
@@ -5,18 +6,23 @@ interface ProfitFactorChartProps {
     grossLoss: number;
 }
 
-// Helper to calculate percentages for the donut chunks
-// to visually represent the ratio.
-// If actual values are used directly, the pie chart works automatically.
-
-const getCssVariableValue = (variableName: string) => {
-    if (typeof window === 'undefined') return '#888888';
-    return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim() || '#888888';
-};
-
 export const ProfitFactorChart = ({ grossProfit, grossLoss }: ProfitFactorChartProps) => {
-    const profitColor = getCssVariableValue('--profit-color') || '#22c55e';
-    const lossColor = getCssVariableValue('--loss-color') || '#ef4444';
+    const [profitColor, setProfitColor] = useState('#22c55e');
+    const [lossColor, setLossColor] = useState('#ef4444');
+
+    useEffect(() => {
+        const root = document.documentElement;
+        const update = () => {
+            const pc = getComputedStyle(root).getPropertyValue('--profit-color').trim();
+            const lc = getComputedStyle(root).getPropertyValue('--loss-color').trim();
+            if (pc) setProfitColor(pc);
+            if (lc) setLossColor(lc);
+        };
+        update();
+        const observer = new MutationObserver(update);
+        observer.observe(root, { attributes: true, attributeFilter: ['style'] });
+        return () => observer.disconnect();
+    }, []);
 
     const data = [
         { name: 'Gross Profit', value: grossProfit },

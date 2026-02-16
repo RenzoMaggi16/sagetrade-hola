@@ -465,15 +465,15 @@ export const Dashboard = () => {
                   </div>
                   {/* Profit / Loss row */}
                   <div className="flex items-center justify-center gap-3 w-full">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-cyan-500/10">
-                      <div className="w-2 h-2 rounded-full bg-cyan-500" />
-                      <span className="text-xs font-semibold text-cyan-400">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md" style={{ backgroundColor: 'color-mix(in srgb, var(--profit-color) 15%, transparent)' }}>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--profit-color)' }} />
+                      <span className="text-xs font-semibold" style={{ color: 'var(--profit-color)' }}>
                         ${metrics?.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-pink-500/10">
-                      <div className="w-2 h-2 rounded-full bg-pink-500" />
-                      <span className="text-xs font-semibold text-pink-400">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md" style={{ backgroundColor: 'color-mix(in srgb, var(--loss-color) 15%, transparent)' }}>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--loss-color)' }} />
+                      <span className="text-xs font-semibold" style={{ color: 'var(--loss-color)' }}>
                         -${metrics?.grossLoss.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
                       </span>
                     </div>
@@ -489,7 +489,7 @@ export const Dashboard = () => {
                   </div>
                   <div className="flex items-center gap-3">
                     {metrics?.bestDayPercentage > 0 && (
-                      <span className="inline-flex items-center px-3 py-9 rounded-full text-lg font-bold text-cyan-400">
+                      <span className="inline-flex items-center px-3 py-9 rounded-full text-lg font-bold" style={{ color: 'var(--profit-color)' }}>
                         +{metrics?.bestDayPercentage?.toFixed(2)}%
                       </span>
                     )}
