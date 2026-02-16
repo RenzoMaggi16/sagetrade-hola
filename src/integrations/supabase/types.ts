@@ -52,6 +52,10 @@ export type Database = {
           funding_target_2: number | null
           funding_phases: number | null
           created_at: string | null
+          drawdown_type: 'fixed' | 'trailing' | null
+          drawdown_amount: number | null
+          profit_target: number | null
+          highest_balance: number | null
         }
         Insert: {
           id?: string
@@ -66,6 +70,10 @@ export type Database = {
           funding_target_2?: number | null
           funding_phases?: number | null
           created_at?: string | null
+          drawdown_type?: 'fixed' | 'trailing' | null
+          drawdown_amount?: number | null
+          profit_target?: number | null
+          highest_balance?: number | null
         }
         Update: {
           id?: string
@@ -79,6 +87,40 @@ export type Database = {
           funding_target_1?: number | null
           funding_target_2?: number | null
           funding_phases?: number | null
+          created_at?: string | null
+          drawdown_type?: 'fixed' | 'trailing' | null
+          drawdown_amount?: number | null
+          profit_target?: number | null
+          highest_balance?: number | null
+        }
+        Relationships: []
+      }
+      payouts: {
+        Row: {
+          id: string
+          user_id: string
+          account_id: string
+          amount: number
+          payout_date: string
+          notes: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          account_id: string
+          amount: number
+          payout_date?: string
+          notes?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          account_id?: string
+          amount?: number
+          payout_date?: string
+          notes?: string | null
           created_at?: string | null
         }
         Relationships: []

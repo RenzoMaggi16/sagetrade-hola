@@ -1,58 +1,55 @@
-import { useQuery } from "@tanstack/react-query";
 import { Brain } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
-import { startOfDay, differenceInDays } from "date-fns";
+
+const PSYCHOLOGY_MESSAGES = [
+    "La disciplina es el puente entre tus metas y tus resultados.",
+    "No operes por venganza. El mercado no te debe nada.",
+    "Respeta tu stop loss como respetas tu capital.",
+    "Un buen trader no predice, reacciona ante lo que ve.",
+    "La paciencia es la habilidad más rentable en el trading.",
+    "Tu peor enemigo en el mercado eres tú mismo.",
+    "Proteger tu capital es más importante que generar ganancias.",
+    "No confundas actividad con productividad. Menos trades, más calidad.",
+    "El mercado siempre estará ahí mañana. No fuerces oportunidades.",
+    "La consistencia viene de seguir tu plan, no de buscar home runs.",
+    "Acepta las pérdidas como parte del costo de hacer negocios.",
+    "Opera con la mente fría. Las emociones son el peor indicador.",
+    "La gestión del riesgo no es opcional, es supervivencia.",
+    "Un diario de trading honesto es tu mejor mentor.",
+    "No necesitas ganar todos los trades, solo necesitas un edge.",
+    "Cada trade es independiente. No dejes que el anterior afecte al siguiente.",
+    "La sobreoperación es síntoma de falta de plan, no de oportunidad.",
+    "Sé humilde ante el mercado. Nadie tiene la razón siempre.",
+    "Tu tamaño de posición refleja tu nivel de disciplina.",
+    "El éxito en trading se mide en meses y años, no en días.",
+    "Antes de operar, pregúntate: ¿esto está en mi plan?",
+    "La confianza se construye con ejecución consistente, no con resultados.",
+    "No muevas tu stop loss en contra de tu análisis original.",
+    "Descansar también es una estrategia de trading válida.",
+    "El FOMO ha destruido más cuentas que cualquier noticia del mercado.",
+    "Documenta cada operación. Lo que no se mide, no se mejora.",
+    "La clave no es tener razón, es ganar más cuando aciertas que cuando fallas.",
+    "Un trader rentable domina su psicología antes que su estrategia.",
+    "Respeta tus reglas incluso cuando el mercado te tienta a romperlas.",
+    "El verdadero progreso está en los hábitos, no en las ganancias de un día.",
+    "Tradea lo que ves, no lo que esperas.",
+];
 
 export const DailyPsychologyQuote = () => {
-    const { data: messages = [] } = useQuery({
-        queryKey: ["daily-psychology-messages"],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from("daily_psychology_messages" as any)
-                .select("message")
-                .order("created_at", { ascending: true }); // Ensure deterministic order
-
-            if (error) {
-                console.error("Error fetching psychology messages:", error);
-                return [];
-            }
-            return data;
-        },
-        staleTime: 1000 * 60 * 60 * 24, // Cache for 24 hours
-    });
-
     const messageOfTheDay = useMemo(() => {
-        if (!messages.length) return null;
-
-        // Use day of year to select a message deterministically
-        const startOfYear = new Date(new Date().getFullYear(), 0, 0);
-        const diff = differenceInDays(startOfDay(new Date()), startOfYear);
-        const dayOfYear = Math.floor(diff);
-
-        // Rotate through messages
-        const index = dayOfYear % messages.length;
-        return messages[index]?.message;
-    }, [messages]);
-
-    if (!messageOfTheDay) return null;
+        const now = new Date();
+        const startOfYear = new Date(now.getFullYear(), 0, 0);
+        const diff = now.getTime() - startOfYear.getTime();
+        const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+        return PSYCHOLOGY_MESSAGES[dayOfYear % PSYCHOLOGY_MESSAGES.length];
+    }, []);
 
     return (
-        <Card className="bg-primary/5 border-primary/20 shadow-sm mb-6">
-            <CardContent className="flex items-center gap-4 p-4 sm:p-6">
-                <div className="flex-shrink-0 p-3 bg-background rounded-full border border-primary/20 shadow-sm">
-                    <Brain className="w-6 h-6 text-primary animate-pulse" />
-                </div>
-                <div className="flex-1">
-                    <h3 className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">
-                        Mensaje del día
-                    </h3>
-                    <p className="text-base sm:text-lg font-medium text-foreground italic">
-                        "{messageOfTheDay}"
-                    </p>
-                </div>
-            </CardContent>
-        </Card>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+            <Brain className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            <p className="italic">
+                {messageOfTheDay}
+            </p>
+        </div>
     );
 };

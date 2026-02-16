@@ -25,6 +25,9 @@ interface FormData {
   funding_phases: number; // 1 o 2 para evaluación
   funding_target_1: number; // objetivo fase 1
   funding_target_2: number; // objetivo fase 2 (opcional)
+  drawdown_type: 'fixed' | 'trailing';
+  drawdown_amount: number;
+  profit_target: number;
 }
 
 const ManageAccounts = () => {
@@ -41,6 +44,9 @@ const ManageAccounts = () => {
     funding_phases: 1,
     funding_target_1: 0,
     funding_target_2: 0,
+    drawdown_type: 'trailing',
+    drawdown_amount: 0,
+    profit_target: 0,
   });
 
   // Cargar cuentas al montar el componente
@@ -52,7 +58,7 @@ const ManageAccounts = () => {
     try {
       setIsLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         toast.error("Usuario no autenticado");
         return;
@@ -89,6 +95,9 @@ const ManageAccounts = () => {
       funding_phases: 1,
       funding_target_1: 0,
       funding_target_2: 0,
+      drawdown_type: 'trailing',
+      drawdown_amount: 0,
+      profit_target: 0,
     });
   };
 
@@ -104,6 +113,9 @@ const ManageAccounts = () => {
         funding_phases: account.funding_phases || 1,
         funding_target_1: account.funding_target_1 || 0,
         funding_target_2: account.funding_target_2 || 0,
+        drawdown_type: account.drawdown_type || 'trailing',
+        drawdown_amount: account.drawdown_amount || 0,
+        profit_target: account.profit_target || 0,
       });
     } else {
       setEditingAccount(null);
@@ -115,7 +127,7 @@ const ManageAccounts = () => {
   const handleSave = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         toast.error("Usuario no autenticado");
         return;
@@ -171,18 +183,22 @@ const ManageAccounts = () => {
         asset_class: formData.asset_class,
         initial_capital: formData.initial_capital,
         current_capital: editingAccount ? editingAccount.current_capital : formData.initial_capital,
-        funding_company: formData.account_type !== 'personal' 
-          ? formData.funding_company.trim() || null 
+        funding_company: formData.account_type !== 'personal'
+          ? formData.funding_company.trim() || null
           : null,
-        funding_target_1: formData.account_type === 'evaluation' 
-          ? (formData.funding_target_1 || null) 
+        funding_target_1: formData.account_type === 'evaluation'
+          ? (formData.funding_target_1 || null)
           : null,
         funding_target_2: formData.account_type === 'evaluation' && formData.funding_phases === 2
           ? (formData.funding_target_2 || null)
           : null,
-        funding_phases: formData.account_type === 'evaluation' 
-          ? formData.funding_phases 
+        funding_phases: formData.account_type === 'evaluation'
+          ? formData.funding_phases
           : null,
+        drawdown_type: formData.drawdown_type,
+        drawdown_amount: formData.drawdown_amount > 0 ? formData.drawdown_amount : null,
+        profit_target: formData.profit_target > 0 ? formData.profit_target : null,
+        highest_balance: editingAccount ? editingAccount.highest_balance : formData.initial_capital,
       };
 
       if (editingAccount) {
@@ -225,6 +241,31 @@ const ManageAccounts = () => {
 
   const handleDelete = async (accountId: string) => {
     try {
+      // First delete all payouts associated with this account
+      const { error: payoutsError } = await supabase
+        .from('payouts')
+        .delete()
+        .eq('account_id', accountId);
+
+      if (payoutsError) {
+        console.error('Error deleting payouts:', payoutsError);
+        toast.error("Error al eliminar los retiros de la cuenta");
+        return;
+      }
+
+      // Then delete all trades associated with this account
+      const { error: tradesError } = await supabase
+        .from('trades')
+        .delete()
+        .eq('account_id', accountId);
+
+      if (tradesError) {
+        console.error('Error deleting trades:', tradesError);
+        toast.error("Error al eliminar los trades de la cuenta");
+        return;
+      }
+
+      // Then delete the account
       const { error } = await supabase
         .from('accounts')
         .delete()
@@ -284,7 +325,7 @@ const ManageAccounts = () => {
             Administra tus cuentas de trading y su configuración
           </p>
         </div>
-        
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => handleOpenDialog()} className="gap-2">
@@ -298,13 +339,13 @@ const ManageAccounts = () => {
                 {editingAccount ? 'Editar Cuenta' : 'Nueva Cuenta'}
               </DialogTitle>
               <DialogDescription>
-                {editingAccount 
+                {editingAccount
                   ? 'Modifica los datos de tu cuenta de trading.'
                   : 'Crea una nueva cuenta de trading para gestionar tus operaciones.'
                 }
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label htmlFor="account_name">Nombre de la Cuenta *</Label>
@@ -322,8 +363,8 @@ const ManageAccounts = () => {
                   value={formData.account_type}
                   onValueChange={(value: "personal" | "evaluation" | "live") => {
                     const validValue = value || "personal";
-                    setFormData(prev => ({ 
-                      ...prev, 
+                    setFormData(prev => ({
+                      ...prev,
                       account_type: validValue,
                       // Limpiar campos si se selecciona 'personal'
                       ...(validValue === 'personal' && {
@@ -355,7 +396,7 @@ const ManageAccounts = () => {
                 <Label htmlFor="asset_class">Clase de Activo *</Label>
                 <Select
                   value={formData.asset_class}
-                  onValueChange={(value: 'futures' | 'forex' | 'crypto' | 'stocks' | 'other') => 
+                  onValueChange={(value: 'futures' | 'forex' | 'crypto' | 'stocks' | 'other') =>
                     setFormData({ ...formData, asset_class: value })
                   }
                 >
@@ -448,8 +489,53 @@ const ManageAccounts = () => {
                   </div>
                 </>
               )}
-            </div>
 
+              <div className="grid gap-2">
+                <Label>Tipo de Drawdown</Label>
+                <RadioGroup
+                  value={formData.drawdown_type}
+                  onValueChange={(value: "fixed" | "trailing") => setFormData({ ...formData, drawdown_type: value })}
+                  className="flex space-x-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="trailing" id="trailing" />
+                    <Label htmlFor="trailing">Trailing (Topstep)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="fixed" id="fixed" />
+                    <Label htmlFor="fixed">Fijo</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="drawdown_amount">Monto de Drawdown ($)</Label>
+                  <Input
+                    id="drawdown_amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.drawdown_amount}
+                    onChange={(e) => setFormData({ ...formData, drawdown_amount: parseFloat(e.target.value) || 0 })}
+                    placeholder="Ej: 2000"
+                  />
+                  <p className="text-xs text-muted-foreground">Máxima pérdida permitida</p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="profit_target">Profit Target ($) (Opcional)</Label>
+                  <Input
+                    id="profit_target"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.profit_target}
+                    onChange={(e) => setFormData({ ...formData, profit_target: parseFloat(e.target.value) || 0 })}
+                    placeholder="Ej: 3000"
+                  />
+                </div>
+              </div>
+            </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancelar
@@ -463,120 +549,120 @@ const ManageAccounts = () => {
       </div>
 
       <div className="mx-auto max-w-5xl">
-      {accounts.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No tienes cuentas registradas</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Crea tu primera cuenta de trading para comenzar a gestionar tus operaciones.
-            </p>
-            <Button onClick={() => handleOpenDialog()} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Crear Primera Cuenta
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 justify-items-center">
-          {accounts.map((account) => (
-            <Card key={account.id} className="relative">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">{account.account_name}</CardTitle>
-                    <CardDescription className="mt-1">
-                      {getAssetClassLabel(account.asset_class)} • {account.account_type === 'personal' ? 'Personal' : account.account_type === 'evaluation' ? 'Evaluación' : 'Fondeada'}
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleOpenDialog(account)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>¿Eliminar cuenta?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta acción no se puede deshacer. Se eliminará permanentemente la cuenta "{account.account_name}" y todos sus datos asociados.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDelete(account.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        {accounts.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No tienes cuentas registradas</h3>
+              <p className="text-muted-foreground text-center mb-4">
+                Crea tu primera cuenta de trading para comenzar a gestionar tus operaciones.
+              </p>
+              <Button onClick={() => handleOpenDialog()} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Crear Primera Cuenta
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 justify-items-center">
+            {accounts.map((account) => (
+              <Card key={account.id} className="relative">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{account.account_name}</CardTitle>
+                      <CardDescription className="mt-1">
+                        {getAssetClassLabel(account.asset_class)} • {account.account_type === 'personal' ? 'Personal' : account.account_type === 'evaluation' ? 'Evaluación' : 'Fondeada'}
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenDialog(account)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                           >
-                            Eliminar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Eliminar cuenta?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta acción no se puede deshacer. Se eliminará permanentemente la cuenta "{account.account_name}" y todos sus datos asociados.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDelete(account.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Eliminar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Capital Inicial:</span>
-                    <span className="font-medium">{formatCurrency(account.initial_capital)}</span>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Capital Inicial:</span>
+                      <span className="font-medium">{formatCurrency(account.initial_capital)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Capital Actual:</span>
+                      <span className="font-medium">{formatCurrency(account.current_capital)}</span>
+                    </div>
+                    {(account.account_type === 'evaluation' || account.account_type === 'live') && (
+                      <>
+                        {account.funding_company && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Empresa:</span>
+                            <span className="font-medium">{account.funding_company}</span>
+                          </div>
+                        )}
+                        {(account.funding_target_1 || account.funding_target_2) && (
+                          <div className="flex flex-col gap-1 text-sm">
+                            {account.funding_target_1 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Objetivo Fase 1:</span>
+                                <span className="font-medium">{formatCurrency(account.funding_target_1)}</span>
+                              </div>
+                            )}
+                            {account.funding_target_2 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Objetivo Fase 2:</span>
+                                <span className="font-medium">{formatCurrency(account.funding_target_2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {account.funding_phases && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Fases:</span>
+                            <span className="font-medium">{account.funding_phases}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Capital Actual:</span>
-                    <span className="font-medium">{formatCurrency(account.current_capital)}</span>
-                  </div>
-                  {(account.account_type === 'evaluation' || account.account_type === 'live') && (
-                    <>
-                      {account.funding_company && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Empresa:</span>
-                          <span className="font-medium">{account.funding_company}</span>
-                        </div>
-                      )}
-                      {(account.funding_target_1 || account.funding_target_2) && (
-                        <div className="flex flex-col gap-1 text-sm">
-                          {account.funding_target_1 && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Objetivo Fase 1:</span>
-                              <span className="font-medium">{formatCurrency(account.funding_target_1)}</span>
-                            </div>
-                          )}
-                          {account.funding_target_2 && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Objetivo Fase 2:</span>
-                              <span className="font-medium">{formatCurrency(account.funding_target_2)}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {account.funding_phases && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Fases:</span>
-                          <span className="font-medium">{account.funding_phases}</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mt-8 text-center">
@@ -586,7 +672,7 @@ const ManageAccounts = () => {
           </Button>
         </Link>
       </div>
-    </div>
+    </div >
   );
 };
 

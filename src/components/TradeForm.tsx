@@ -339,6 +339,35 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         if (updateError) throw updateError;
         tradeId = updatedTrade.id;
 
+        // Recalcular capital y highest_balance al editar
+        const oldPnl = parseFloat(tradeToEdit.pnl_neto) || 0;
+        const newPnl = pnlValue;
+        const pnlDelta = newPnl - oldPnl;
+
+        if (pnlDelta !== 0) {
+          const { data: accountData, error: accountError } = await supabase
+            .from('accounts')
+            .select('current_capital, highest_balance, initial_capital')
+            .eq('id', selectedAccountId)
+            .single();
+
+          if (!accountError && accountData) {
+            const currentCap = accountData.current_capital || 0;
+            const initialCap = accountData.initial_capital || 0;
+            const newCapital = currentCap + pnlDelta;
+
+            const currentHighest = accountData.highest_balance ?? Math.max(currentCap, initialCap);
+            const newHighestBalance = Math.max(currentHighest, newCapital);
+
+            await supabase
+              .from('accounts')
+              .update({
+                current_capital: newCapital,
+                highest_balance: newHighestBalance
+              })
+              .eq('id', selectedAccountId);
+          }
+        }
 
         toast.success("Trade actualizado con éxito");
 
@@ -360,18 +389,47 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
         // Actualizar Current Capital de la cuenta
         const { data: accountData, error: accountError } = await supabase
           .from('accounts')
-          .select('current_capital')
+          .select('current_capital, highest_balance, initial_capital')
           .eq('id', selectedAccountId)
           .single();
 
         if (accountError) throw new Error("No se pudo obtener el capital actual de la cuenta.");
 
         const pnlAmount = parseFloat(formData.pnl_neto);
-        const newCapital = (accountData?.current_capital || 0) + pnlAmount;
+        const currentCap = accountData?.current_capital || 0;
+        const initialCap = accountData?.initial_capital || 0;
+        const newCapital = currentCap + pnlAmount;
+
+        // Calculate new highest balance
+        // Logic: Highest Balance should NEVER decrease.
+        // It starts at Initial Capital.
+        // It only goes up if New Capital > Current Highest.
+
+        // 1. Determine the baseline highest (from DB or default to max(current, initial))
+        const currentHighest = accountData?.highest_balance ?? Math.max(currentCap, initialCap);
+
+        // 2. Calculate new highest (compare baseline vs new capital)
+        // Ensure newHighestBalance exceeds currentHighest to trigger an update, or at least equals it.
+        // STRICT HWM RULE: HWM never goes down.
+        const newHighestBalance = Math.max(currentHighest, newCapital);
+
+        // Debug info (optional, for development)
+        console.log("Trailing Drawdown Debug:", {
+          currentCap,
+          initialCap,
+          pnlAmount,
+          newCapital,
+          currentHighest,
+          newHighestBalance,
+          shouldUpdate: newHighestBalance > currentHighest
+        });
 
         const { error: updateError } = await supabase
           .from('accounts')
-          .update({ current_capital: newCapital })
+          .update({
+            current_capital: newCapital,
+            highest_balance: newHighestBalance
+          })
           .eq('id', selectedAccountId);
 
         if (updateError) throw new Error("Error al actualizar el capital de la cuenta.");
@@ -384,6 +442,8 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       // Éxito: Resetear formulario y refrescar datos
       queryClient.invalidateQueries({ queryKey: ["tradesList"] }); // Refresca la tabla
       queryClient.invalidateQueries({ queryKey: ["trades"] }); // Refresca la lista general
+      queryClient.invalidateQueries({ queryKey: ["accounts"] }); // Refresca las cuentas (para actualizar capital y highest_balance)
+
       if (tradeToEdit) {
         queryClient.invalidateQueries({ queryKey: ["trades", tradeId] }); // Refresca el detalle del trade
       }

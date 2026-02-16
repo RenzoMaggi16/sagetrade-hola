@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { Search, Trash2, Eye, Pencil } from "lucide-react";
+import { Search, Trash2, Eye, Pencil, Banknote } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { TradeForm } from "@/components/TradeForm";
@@ -30,6 +30,18 @@ interface TradeRow {
   account_name: string | null;
   rules_compliance_pct: number | null;
 }
+
+interface PayoutRow {
+  id: string;
+  payout_date: string;
+  amount: number;
+  notes: string | null;
+  account_id: string;
+}
+
+type UnifiedRow =
+  | { type: 'trade'; data: TradeRow; sortDate: Date }
+  | { type: 'payout'; data: PayoutRow; sortDate: Date };
 
 export const TradesTable = () => {
   const [symbolFilter, setSymbolFilter] = useState("");
@@ -45,6 +57,23 @@ export const TradesTable = () => {
       const { data, error } = await (supabase as any).rpc('get_trades_list');
       if (error) throw error;
       return (data ?? []) as TradeRow[];
+    },
+  });
+
+  const { data: payouts = [], isLoading: isLoadingPayouts } = useQuery({
+    queryKey: ["payouts-list"],
+    queryFn: async (): Promise<PayoutRow[]> => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('payouts')
+        .select('id, payout_date, amount, notes, account_id')
+        .eq('user_id', user.id)
+        .order('payout_date', { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []) as PayoutRow[];
     },
   });
 
@@ -84,6 +113,66 @@ export const TradesTable = () => {
     }
   };
 
+  const handleDeletePayout = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (window.confirm('¿Estás seguro de que quieres borrar este retiro?')) {
+      try {
+        // Get payout details before deleting to restore balance
+        const { data: payout } = await supabase
+          .from('payouts')
+          .select('amount, account_id')
+          .eq('id', id)
+          .single();
+
+        const { error } = await supabase
+          .from('payouts')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          toast({
+            title: "Error",
+            description: "No se pudo borrar el retiro: " + error.message,
+            variant: "destructive",
+          });
+        } else {
+          // Restore balance
+          if (payout) {
+            const { data: account } = await supabase
+              .from('accounts')
+              .select('current_capital')
+              .eq('id', payout.account_id)
+              .single();
+
+            if (account) {
+              await supabase
+                .from('accounts')
+                .update({ current_capital: account.current_capital + payout.amount })
+                .eq('id', payout.account_id);
+            }
+          }
+
+          toast({
+            title: "Éxito",
+            description: "Retiro borrado correctamente",
+          });
+          queryClient.invalidateQueries({ queryKey: ["payouts-list"] });
+          queryClient.invalidateQueries({ queryKey: ["payouts"] });
+          queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        }
+      } catch (error) {
+        console.error("Error inesperado:", error);
+        toast({
+          title: "Error",
+          description: "Ocurrió un error inesperado al borrar el retiro",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   const handleEdit = async (tradeId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -110,16 +199,41 @@ export const TradesTable = () => {
     }
   };
 
-  const filteredTrades = useMemo(() => {
-    return trades.filter((trade) => {
-      const par = (trade.par ?? '').toLowerCase();
-      const matchesSymbol = symbolFilter ? par.includes(symbolFilter.toLowerCase()) : true;
-      const tradeDate = trade.entry_time ? new Date(trade.entry_time) : undefined;
-      const matchesStartDate = startDate && tradeDate ? tradeDate >= new Date(startDate) : true;
-      const matchesEndDate = endDate && tradeDate ? tradeDate <= new Date(endDate) : true;
-      return matchesSymbol && matchesStartDate && matchesEndDate;
-    });
-  }, [trades, symbolFilter, startDate, endDate]);
+  // Merge trades and payouts into a unified list sorted by date desc
+  const unifiedRows: UnifiedRow[] = useMemo(() => {
+    const tradeRows: UnifiedRow[] = trades
+      .filter((trade) => {
+        const par = (trade.par ?? '').toLowerCase();
+        const matchesSymbol = symbolFilter ? par.includes(symbolFilter.toLowerCase()) : true;
+        const tradeDate = trade.entry_time ? new Date(trade.entry_time) : undefined;
+        const matchesStartDate = startDate && tradeDate ? tradeDate >= new Date(startDate) : true;
+        const matchesEndDate = endDate && tradeDate ? tradeDate <= new Date(endDate) : true;
+        return matchesSymbol && matchesStartDate && matchesEndDate;
+      })
+      .map(t => ({
+        type: 'trade' as const,
+        data: t,
+        sortDate: new Date(t.entry_time),
+      }));
+
+    const payoutRows: UnifiedRow[] = payouts
+      .filter((p) => {
+        const payoutDate = new Date(p.payout_date);
+        const matchesStartDate = startDate ? payoutDate >= new Date(startDate) : true;
+        const matchesEndDate = endDate ? payoutDate <= new Date(endDate) : true;
+        // don't filter by symbol for payouts
+        return matchesStartDate && matchesEndDate;
+      })
+      .map(p => ({
+        type: 'payout' as const,
+        data: p,
+        sortDate: new Date(p.payout_date),
+      }));
+
+    return [...tradeRows, ...payoutRows].sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
+  }, [trades, payouts, symbolFilter, startDate, endDate]);
+
+  const loading = isLoading || isLoadingPayouts;
 
   return (
     <>
@@ -163,9 +277,9 @@ export const TradesTable = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {loading ? (
             <div className="text-center py-8 text-muted-foreground">Cargando...</div>
-          ) : filteredTrades.length === 0 ? (
+          ) : unifiedRows.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No se encontraron operaciones
             </div>
@@ -184,7 +298,45 @@ export const TradesTable = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTrades.map((trade) => {
+                  {unifiedRows.map((row) => {
+                    if (row.type === 'payout') {
+                      const p = row.data;
+                      return (
+                        <TableRow key={`payout-${p.id}`} className="hover:bg-violet-500/5 border-l-2 border-l-violet-500">
+                          <TableCell className="font-medium">
+                            {format(new Date(p.payout_date), "dd/MM/yyyy HH:mm")}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="border-violet-500/50 text-violet-400 gap-1">
+                              <Banknote className="h-3 w-3" />
+                              RETIRO
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-violet-400">
+                            -${Number(p.amount).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-violet-400">
+                            💸 Payout
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {p.notes || '-'}
+                          </TableCell>
+                          <TableCell>-</TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => handleDeletePayout(p.id, e)}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+
+                    const trade = row.data;
                     const pnl = Number(trade.pnl_neto ?? 0);
                     const isBuy = trade.trade_type === 'buy';
                     return (

@@ -52,39 +52,33 @@ export function DailyPerformanceStats({ trades, displayMode = 'dollars', initial
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <Card className="flex flex-col">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                     <CardTitle className="text-sm font-medium">Ganancia Promedio Diaria</CardTitle>
-                    <TrendingUp className="h-4 w-4 text-profit-custom" />
+                    <TrendingUp className="h-5 w-5 text-profit-custom" />
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-profit-custom">
+                <CardContent className="flex-1 flex items-center py-10">
+                    <div className="text-3xl font-bold text-profit-custom tracking-tight">
                         {displayMode === 'percentage' && initialCapital > 0
                             ? `${((stats.avgDailyProfit / initialCapital) * 100).toFixed(2)}%`
                             : `$${stats.avgDailyProfit.toFixed(2)}`
                         }
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-
-                    </p>
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <Card className="flex flex-col">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                     <CardTitle className="text-sm font-medium">Pérdida Promedio Diaria</CardTitle>
-                    <TrendingDown className="h-4 w-4 text-loss-custom" />
+                    <TrendingDown className="h-5 w-5 text-loss-custom" />
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-loss-custom">
+                <CardContent className="flex-1 flex items-center py-10">
+                    <div className="text-3xl font-bold text-loss-custom tracking-tight">
                         {displayMode === 'percentage' && initialCapital > 0
                             ? `-${((Math.abs(stats.avgDailyLoss) / initialCapital) * 100).toFixed(2)}%`
                             : `-$${Math.abs(stats.avgDailyLoss).toFixed(2)}`
                         }
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-
-                    </p>
                 </CardContent>
             </Card>
         </div>

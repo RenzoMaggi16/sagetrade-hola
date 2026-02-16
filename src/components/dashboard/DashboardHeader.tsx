@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Settings, RefreshCw, Calendar as CalendarIcon, Filter, X, DollarSign, Percent } from "lucide-react";
+import { Calendar as CalendarIcon, Filter, X, DollarSign, Percent } from "lucide-react";
 import type { CalendarDisplayMode } from "@/components/Dashboard";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
@@ -25,7 +25,6 @@ interface DashboardHeaderProps {
 
 export const DashboardHeader = ({ selectedAccountId, onAccountChange, accounts, dateRange, setDateRange, displayMode, setDisplayMode }: DashboardHeaderProps) => {
     const [userName, setUserName] = useState<string>("Trader");
-    const [lastSync, setLastSync] = useState<string>("Ahora mismo");
 
     useEffect(() => {
         // Fetch user name
@@ -36,14 +35,6 @@ export const DashboardHeader = ({ selectedAccountId, onAccountChange, accounts, 
             }
         };
         getUser();
-
-        // Simulate sync timer
-        const interval = setInterval(() => {
-            const seconds = Math.floor(Math.random() * 60);
-            setLastSync(`hace ${seconds} segundos`);
-        }, 30000);
-
-        return () => clearInterval(interval);
     }, []);
 
     const handlePresetChange = (preset: string) => {
@@ -63,15 +54,11 @@ export const DashboardHeader = ({ selectedAccountId, onAccountChange, accounts, 
     };
 
     return (
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-1">
             <div>
                 <h1 className="text-2xl font-bold flex items-center gap-2">
                     Bienvenido <span className="text-profit-custom">{userName}</span>
                 </h1>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                    <span>Ultima Sinc.: {lastSync}</span>
-                    <RefreshCw className="h-3 w-3" />
-                </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
@@ -108,11 +95,7 @@ export const DashboardHeader = ({ selectedAccountId, onAccountChange, accounts, 
                     </SelectContent>
                 </Select>
 
-                <Button variant="outline" size="icon" className="bg-card border-border/50" asChild>
-                    <Link to="/reglas">
-                        <Settings className="h-4 w-4" />
-                    </Link>
-                </Button>
+
 
                 {/* Date Picker */}
                 <Popover>

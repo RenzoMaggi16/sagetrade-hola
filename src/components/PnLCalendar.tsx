@@ -13,19 +13,27 @@ interface Trade {
   pnl_neto: number;
 }
 
+interface Payout {
+  id: string;
+  payout_date: string;
+  amount: number;
+}
+
 interface DayPnL {
   date: Date;
   pnl: number;
   tradeCount: number;
+  payoutAmount: number;
 }
 
 interface PnLCalendarProps {
   trades: Trade[];
+  payouts?: Payout[];
   displayMode?: CalendarDisplayMode;
   initialCapital?: number;
 }
 
-export const PnLCalendar = ({ trades = [], displayMode = 'dollars', initialCapital = 0 }: PnLCalendarProps) => {
+export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars', initialCapital = 0 }: PnLCalendarProps) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [dailyPnL, setDailyPnL] = useState<DayPnL[]>([]);
 
@@ -47,15 +55,24 @@ export const PnLCalendar = ({ trades = [], displayMode = 'dollars', initialCapit
         0
       );
 
+      const dayPayouts = payouts.filter(p =>
+        isSameDay(new Date(p.payout_date), day)
+      );
+      const totalPayout = dayPayouts.reduce(
+        (sum, p) => sum + Number(p.amount),
+        0
+      );
+
       return {
         date: day,
         pnl: totalPnL,
-        tradeCount: dayTrades.length
+        tradeCount: dayTrades.length,
+        payoutAmount: totalPayout,
       };
     });
 
     setDailyPnL(pnlByDay);
-  }, [trades, currentMonth]);
+  }, [trades, payouts, currentMonth]);
 
   const goToPreviousMonth = () => {
     const prevMonth = new Date(currentMonth);
@@ -124,11 +141,14 @@ export const PnLCalendar = ({ trades = [], displayMode = 'dollars', initialCapit
               const isNeutral = hasTrades && dayPnL.pnl === 0;
               const isCurrentDay = isToday(date);
               const isCurrentMonth = isThisMonth(date);
+              const hasPayout = dayPnL && dayPnL.payoutAmount > 0;
 
               // Determinar los estilos condicionales
               let borderClass = "border border-border";
 
-              if (isProfitable) {
+              if (hasPayout && !hasTrades) {
+                borderClass = "border border-violet-500";
+              } else if (isProfitable) {
                 borderClass = "border border-profit-custom";
               } else if (isLoss) {
                 borderClass = "border border-loss-custom";
@@ -136,8 +156,12 @@ export const PnLCalendar = ({ trades = [], displayMode = 'dollars', initialCapit
                 borderClass = "border border-neutral-500";
               }
 
+              const bgClass = hasTrades
+                ? (isProfitable ? 'bg-calendar-profit' : isLoss ? 'bg-calendar-loss' : 'bg-neutral-800')
+                : hasPayout ? 'bg-violet-500/10' : 'bg-card';
+
               return (
-                <div className={`rounded-md ${borderClass} relative flex items-center justify-center flex-col p-1 h-24 w-full ${hasTrades ? (isProfitable ? 'bg-calendar-profit' : isLoss ? 'bg-calendar-loss' : 'bg-neutral-800') : 'bg-card'}`}>
+                <div className={`rounded-md ${borderClass} relative flex items-center justify-center flex-col p-1 h-24 w-full ${bgClass}`}>
                   {/* Número del día en la esquina superior derecha */}
                   <div className="absolute top-1 right-1">
                     {isCurrentDay ? (
@@ -152,7 +176,7 @@ export const PnLCalendar = ({ trades = [], displayMode = 'dollars', initialCapit
                   </div>
 
                   {/* Contenido del PnL */}
-                  <div className="flex items-center justify-center">
+                  <div className="flex flex-col items-center justify-center gap-0.5">
                     {hasTrades ? (
                       <span className={`text-sm font-medium ${isNeutral ? 'text-neutral-300' : ''}`}>
                         {displayMode === 'percentage' && initialCapital > 0
@@ -160,14 +184,11 @@ export const PnLCalendar = ({ trades = [], displayMode = 'dollars', initialCapit
                           : `$${Math.abs(dayPnL.pnl).toFixed(2)}`
                         }
                       </span>
-                    ) : (
-                      // Only show 'Sin Trade' if we are in this month component context, 
-                      // but 'isThisMonth' from date-fns checks 'today' vs date. 
-                      // Basically we don't want to show 'Sin Trade' on future dates if we wanted to be strict,
-                      // but let's keep original logic or simplify.
-                      // Currently it shows for all days without trades.
-                      // Let's hide it to make it cleaner like the reference image.
-                      null
+                    ) : null}
+                    {hasPayout && (
+                      <span className="text-[10px] font-semibold text-violet-400">
+                        💸 -${dayPnL!.payoutAmount.toFixed(0)}
+                      </span>
                     )}
                   </div>
                 </div>

@@ -18,6 +18,7 @@ import { DisciplineCard } from "./dashboard/DisciplineCard";
 import { useTradingPlan } from "@/hooks/useTradingPlan";
 import { useDisciplineMetrics } from "@/hooks/useDisciplineMetrics";
 import { DailyPsychologyQuote } from "@/components/dashboard/DailyPsychologyQuote";
+import { RiskAccountCard } from "@/components/dashboard/RiskAccountCard";
 import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -39,6 +40,10 @@ interface Account {
   account_name: string;
   account_type: 'personal' | 'evaluation' | 'live';
   initial_capital: number;
+  current_capital: number;
+  drawdown_type?: 'fixed' | 'trailing' | null;
+  drawdown_amount?: number | null;
+  highest_balance?: number | null;
 }
 
 export const Dashboard = () => {
@@ -64,7 +69,7 @@ export const Dashboard = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name, account_type, initial_capital')
+        .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, highest_balance')
         .order('created_at', { ascending: true }); // Oldest first = "First Created"
 
       if (error) throw error;
@@ -94,6 +99,24 @@ export const Dashboard = () => {
 
       if (error) throw error;
       return data as Trade[];
+    },
+  });
+
+  // 3b. Fetch Payouts (Filtered by selectedAccountId)
+  const { data: payouts = [] } = useQuery({
+    queryKey: ["payouts", selectedAccountId],
+    enabled: !!selectedAccountId,
+    queryFn: async () => {
+      if (!selectedAccountId) return [];
+
+      const { data, error } = await supabase
+        .from("payouts")
+        .select("id, payout_date, amount")
+        .eq("account_id", selectedAccountId)
+        .order("payout_date", { ascending: true });
+
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -282,13 +305,13 @@ export const Dashboard = () => {
   // For Equity Curve: We need the running balance.
   // We should calculate the running balance from the BEGINNING of time up to the start of the filter, to get the "Opening Balance" for the chart.
 
-  const { equityCurveData, currentBalance } = useMemo(() => {
+  const { equityCurveData, currentBalance, highWaterMark } = useMemo(() => {
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     const initialCapital = selectedAccount?.initial_capital || 0;
 
     // We need ALL trades to calculate absolute balance
     if (!allTrades || allTrades.length === 0) {
-      return { equityCurveData: [], currentBalance: initialCapital };
+      return { equityCurveData: [], currentBalance: initialCapital, highWaterMark: initialCapital };
     }
 
     const sortedAllTrades = [...allTrades].sort((a, b) => new Date(a.entry_time).getTime() - new Date(b.entry_time).getTime());
@@ -321,17 +344,28 @@ export const Dashboard = () => {
       };
     });
 
-    // Current Balance is always the Final Balance of the account (unless we want 'Closing Balance of Period')
-    // If I filter "Last week", seeing "Balance: $10,000" (current) makes sense.
-    // Seeing "Balance: $50" (profit made that week) would be misleading for "Balance".
-    // So "Current Balance" should probably remain "Total Account Balance".
+    // Current Balance = initial + sum of ALL trades PnL - sum of ALL payouts
     const totalPnL = sortedAllTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
+    const totalPayouts = payouts.reduce((sum, p) => sum + Number(p.amount), 0);
+    const computedBalance = initialCapital + totalPnL - totalPayouts;
+
+    // High Water Mark = maximum running balance ever reached (computed from ALL trades)
+    // This is the source of truth — no DB dependency.
+    let hwm = initialCapital;
+    let runningBalance = initialCapital;
+    for (const trade of sortedAllTrades) {
+      runningBalance += Number(trade.pnl_neto);
+      if (runningBalance > hwm) {
+        hwm = runningBalance;
+      }
+    }
 
     return {
       equityCurveData: curve,
-      currentBalance: initialCapital + totalPnL
+      currentBalance: computedBalance,
+      highWaterMark: hwm
     };
-  }, [allTrades, accounts, selectedAccountId, dateRange]);
+  }, [allTrades, payouts, accounts, selectedAccountId, dateRange]);
 
   // If no account is selected (loading or empty), show friendly state
   if (!selectedAccountId && !isLoadingAccounts) {
@@ -410,72 +444,76 @@ export const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Left Column */}
             <div className="col-span-1 flex flex-col gap-4">
-              {/* Profit Factor Card */}
-              <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>
-                <div className="flex items-center justify-center mt-3 gap-4">
-                  {/* Gross Profit */}
-                  <div className="text-sm font-bold text-profit">
-                    ${metrics?.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
-                  </div>
+              {/* Risk Account Card */}
+              {selectedAccountId && accounts.find(a => a.id === selectedAccountId) && (
+                <RiskAccountCard
+                  account={accounts.find(a => a.id === selectedAccountId)!}
+                  currentBalance={currentBalance}
+                  highWaterMark={highWaterMark}
+                />
+              )}
 
+              {/* Profit Factor Card — improved aesthetics */}
+              <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>
+                <div className="flex flex-col items-center gap-3 mt-2">
                   {/* Chart */}
-                  <div className="h-14 w-14">
+                  <div className="h-16 w-16">
                     <ProfitFactorChart
                       grossProfit={metrics?.grossProfit || 0}
                       grossLoss={metrics?.grossLoss || 0}
                     />
                   </div>
-
-                  {/* Gross Loss */}
-                  <div className="text-sm font-bold text-loss">
-                    -${metrics?.grossLoss.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                  {/* Profit / Loss row */}
+                  <div className="flex items-center justify-center gap-3 w-full">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-cyan-500/10">
+                      <div className="w-2 h-2 rounded-full bg-cyan-500" />
+                      <span className="text-xs font-semibold text-cyan-400">
+                        ${metrics?.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-pink-500/10">
+                      <div className="w-2 h-2 rounded-full bg-pink-500" />
+                      <span className="text-xs font-semibold text-pink-400">
+                        -${metrics?.grossLoss.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </StatCard>
 
-              {/* Best Day Card */}
+              {/* Best Day Card — improved aesthetics */}
               <StatCard title="Mejor Día">
-                <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold capitalize text-white">
+                <div className="flex flex-col gap-2">
+                  <div className="text-2xl font-bold capitalize text-foreground tracking-tight">
                     {metrics?.bestDayIndex !== -1 ? metrics?.bestDayName : "N/A"}
                   </div>
-                  <div className="flex flex-col items-end">
-                    <span className={`text-2xl font-bold ${metrics?.bestDayPercentage > 0 ? "text-profit" : "text-muted-foreground"}`}>
-                      {metrics?.bestDayPercentage > 0 ? "+" : ""}{metrics?.bestDayPercentage?.toFixed(2) || "0.00"}%
-                    </span>
-                    <span className="text-base font-medium text-muted-foreground">
+                  <div className="flex items-center gap-3">
+                    {metrics?.bestDayPercentage > 0 && (
+                      <span className="inline-flex items-center px-3 py-9 rounded-full text-lg font-bold text-cyan-400">
+                        +{metrics?.bestDayPercentage?.toFixed(2)}%
+                      </span>
+                    )}
+                    <span className="text-lg font-medium text-muted-foreground">
                       ${metrics?.bestDayProfit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
                     </span>
                   </div>
                 </div>
               </StatCard>
-
-              {/* Balance Filtered */}
-              <StatCard title="Balance" value={
-                displayMode === 'percentage' && (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0) > 0
-                  ? `${(((currentBalance - (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0)) / (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1)) * 100).toFixed(2)}%`
-                  : `$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-              } className="flex-grow flex flex-col">
-                <div className="flex-grow min-h-[150px]">
-                  <EquityChart data={equityCurveData.map(d => ({ date: d.date, cumulativePnl: d.cumulativePnl }))} />
-                </div>
-              </StatCard>
             </div>
 
-            {/* Right Column: Calendar */}
-            <div className="col-span-1 md:col-span-3">
+            {/* Right Column: Calendar + Daily Stats */}
+            <div className="col-span-1 md:col-span-3 space-y-4">
               <PnLCalendar
+                trades={trades}
+                payouts={payouts}
+                displayMode={displayMode}
+                initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
+              />
+              <DailyPerformanceStats
                 trades={trades}
                 displayMode={displayMode}
                 initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
               />
-              <div className="mt-4">
-                <DailyPerformanceStats
-                  trades={trades}
-                  displayMode={displayMode}
-                  initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -493,6 +531,17 @@ export const Dashboard = () => {
           />
         </div>
       </div>
+
+      {/* Balance Card — full width, below all content */}
+      <StatCard title="Balance" value={
+        displayMode === 'percentage' && (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0) > 0
+          ? `${(((currentBalance - (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0)) / (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1)) * 100).toFixed(2)}%`
+          : `$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+      }>
+        <div className="min-h-[280px]">
+          <EquityChart data={equityCurveData.map(d => ({ date: d.date, cumulativePnl: d.cumulativePnl }))} />
+        </div>
+      </StatCard>
 
       {/* Trading Plan Edit Modal */}
       <TradingPlanEditModal

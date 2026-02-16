@@ -5,8 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Settings as SettingsIcon, Check, Moon, Sun, Zap } from "lucide-react";
-import MisReglas from './MisReglas';
-import ManageStrategies from './ManageStrategies';
+
 import ManageAccounts from './ManageAccounts';
 import { useColors, THEMES, ThemeType } from '@/context/ColorProvider';
 import { cn } from "@/lib/utils";
@@ -128,28 +127,8 @@ const Settings = () => {
             </AccordionContent>
           </AccordionItem>
 
-          {/* Item 2: Mis Reglas */}
+          {/* Item 2: Cuentas */}
           <AccordionItem value="item-2">
-            <AccordionTrigger className="text-xl font-medium">
-              Mis Reglas
-            </AccordionTrigger>
-            <AccordionContent>
-              <MisReglas />
-            </AccordionContent>
-          </AccordionItem>
-
-          {/* Item 3: Estrategias */}
-          <AccordionItem value="item-3">
-            <AccordionTrigger className="text-xl font-medium">
-              Gestionar Estrategias
-            </AccordionTrigger>
-            <AccordionContent>
-              <ManageStrategies />
-            </AccordionContent>
-          </AccordionItem>
-
-          {/* Item 4: Cuentas */}
-          <AccordionItem value="item-4">
             <AccordionTrigger className="text-xl font-medium">
               Gestionar Cuentas
             </AccordionTrigger>

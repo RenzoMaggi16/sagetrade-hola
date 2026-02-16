@@ -11,9 +11,9 @@ export const TradeCountChart = ({ data }: TradeCountChartProps) => {
                 <AreaChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                     <defs>
                         <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.5} />
-                            <stop offset="50%" stopColor="#3B82F6" stopOpacity={0.2} />
-                            <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                            <stop offset="0%" stopColor="#03fffe" stopOpacity={0.5} />
+                            <stop offset="50%" stopColor="#03fffe" stopOpacity={0.2} />
+                            <stop offset="100%" stopColor="#03fffe" stopOpacity={0} />
                         </linearGradient>
                     </defs>
                     <XAxis dataKey="date" hide />
@@ -34,12 +34,12 @@ export const TradeCountChart = ({ data }: TradeCountChartProps) => {
                     <Area
                         type="basis"
                         dataKey="count"
-                        stroke="#3B82F6"
+                        stroke="#03fffe"
                         strokeWidth={2.5}
                         fillOpacity={1}
                         fill="url(#colorCount)"
                         dot={false}
-                        activeDot={{ r: 4, fill: '#3B82F6', stroke: '#fff', strokeWidth: 2 }}
+                        activeDot={{ r: 4, fill: '#03fffe', stroke: '#fff', strokeWidth: 2 }}
                     />
                 </AreaChart>
             </ResponsiveContainer>
