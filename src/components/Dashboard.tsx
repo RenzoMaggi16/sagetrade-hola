@@ -44,6 +44,8 @@ interface Account {
   drawdown_type?: 'fixed' | 'trailing' | null;
   drawdown_amount?: number | null;
   highest_balance?: number | null;
+  profit_target?: number | null;
+  funding_target_1?: number | null;
 }
 
 export const Dashboard = () => {
@@ -69,7 +71,7 @@ export const Dashboard = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, highest_balance')
+        .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, highest_balance, profit_target, funding_target_1')
         .order('created_at', { ascending: true }); // Oldest first = "First Created"
 
       if (error) throw error;
@@ -450,14 +452,22 @@ export const Dashboard = () => {
                   account={accounts.find(a => a.id === selectedAccountId)!}
                   currentBalance={currentBalance}
                   highWaterMark={highWaterMark}
+                  profitTarget={
+                    (() => {
+                      const acc = accounts.find(a => a.id === selectedAccountId)!;
+                      return acc.account_type === 'evaluation'
+                        ? (acc.funding_target_1 ?? undefined)
+                        : (acc.profit_target ?? undefined);
+                    })()
+                  }
                 />
               )}
 
               {/* Profit Factor Card — improved aesthetics */}
               <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>
-                <div className="flex flex-col items-center gap-3 mt-2">
+                <div className="flex flex-col items-center gap-2 mt-2">
                   {/* Chart */}
-                  <div className="h-16 w-16">
+                  <div className="h-13 w-13">
                     <ProfitFactorChart
                       grossProfit={metrics?.grossProfit || 0}
                       grossLoss={metrics?.grossLoss || 0}
@@ -483,17 +493,17 @@ export const Dashboard = () => {
 
               {/* Best Day Card — improved aesthetics */}
               <StatCard title="Mejor Día">
-                <div className="flex flex-col gap-2">
-                  <div className="text-2xl font-bold capitalize text-foreground tracking-tight">
+                <div className="flex items-center gap-3 py-0.5">
+                  <div className="text-xl font-bold capitalize text-foreground tracking-tight">
                     {metrics?.bestDayIndex !== -1 ? metrics?.bestDayName : "N/A"}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     {metrics?.bestDayPercentage > 0 && (
-                      <span className="inline-flex items-center px-3 py-9 rounded-full text-lg font-bold" style={{ color: 'var(--profit-color)' }}>
-                        +{metrics?.bestDayPercentage?.toFixed(2)}%
+                      <span className="text-m font-bold" style={{ color: 'var(--profit-color)' }}>
+                        +{metrics?.bestDayPercentage?.toFixed(1)}%
                       </span>
                     )}
-                    <span className="text-lg font-medium text-muted-foreground">
+                    <span className="text-m font-medium text-muted-foreground">
                       ${metrics?.bestDayProfit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
                     </span>
                   </div>

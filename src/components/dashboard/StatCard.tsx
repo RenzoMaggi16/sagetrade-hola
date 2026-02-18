@@ -23,12 +23,12 @@ export const StatCard = ({
   return (
     <Card className={cn("bg-card border-border/50 shadow-sm", className)}>
       <CardHeader className={cn("pb-2", headerClassName)}>
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+        <CardTitle className="text-xs font-medium text-muted-foreground">
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent className={cn("space-y-1", contentClassName)}>
-        {value && <div className="text-2xl font-bold">{value}</div>}
+        {value && <div className="text-xl font-bold">{value}</div>}
         {subValue && (
           <p className="text-xs text-muted-foreground">{subValue}</p>
         )}

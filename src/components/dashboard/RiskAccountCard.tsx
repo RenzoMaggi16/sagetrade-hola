@@ -1,6 +1,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, TrendingDown, ShieldCheck, ShieldAlert, Ban, Trophy, DollarSign, Ruler } from "lucide-react";
+import { AlertTriangle, TrendingDown, ShieldCheck, ShieldAlert, Ban, Trophy, DollarSign, Ruler, Target } from "lucide-react";
 
 interface Account {
   id: string;
@@ -10,15 +10,17 @@ interface Account {
   drawdown_type?: 'fixed' | 'trailing' | null;
   drawdown_amount?: number | null;
   highest_balance?: number | null;
+  profit_target?: number | null;
 }
 
 interface RiskAccountCardProps {
   account: Account;
   currentBalance: number;
   highWaterMark?: number;
+  profitTarget?: number;
 }
 
-export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmProp }: RiskAccountCardProps) => {
+export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmProp, profitTarget }: RiskAccountCardProps) => {
   if (!account.drawdown_amount || account.drawdown_amount <= 0) {
     return null;
   }
@@ -177,6 +179,51 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
             </span>
           </div>
         )}
+
+        {/* Objetivo de Profit */}
+        {profitTarget && profitTarget > 0 && (() => {
+          const targetBalance = account.initial_capital + profitTarget;
+          const profitSoFar = currentBalance - account.initial_capital;
+          const remaining = profitTarget - profitSoFar;
+          const progressPctTarget = Math.max(0, Math.min(100, (profitSoFar / profitTarget) * 100));
+          const remainingPct = ((remaining / account.initial_capital) * 100);
+          const isAchieved = remaining <= 0;
+
+          return (
+            <>
+              <div className="border-t border-border/40" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Objetivo</span>
+                </div>
+                <span className="text-base font-mono font-semibold text-sky-400/90">
+                  {formatCurrency(targetBalance)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Faltan</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-bold ${isAchieved ? 'text-emerald-400' : 'text-sky-300'}`}>
+                    {isAchieved ? '✓ Logrado' : `${formatCurrency(remaining)} (${remainingPct.toFixed(1)}%)`}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="w-full h-1.5 bg-muted/40 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${isAchieved ? 'bg-emerald-500' : 'bg-sky-500'}`}
+                    style={{ width: `${progressPctTarget}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>{progressPctTarget.toFixed(0)}% completado</span>
+                  <span>{formatCurrency(profitTarget)}</span>
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
       </CardContent>
     </Card>

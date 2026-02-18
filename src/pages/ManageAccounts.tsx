@@ -534,18 +534,20 @@ const ManageAccounts = () => {
                   />
                   <p className="text-xs text-muted-foreground">Máxima pérdida permitida</p>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="profit_target">Profit Target ($) (Opcional)</Label>
-                  <Input
-                    id="profit_target"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.profit_target}
-                    onChange={(e) => setFormData({ ...formData, profit_target: parseFloat(e.target.value) || 0 })}
-                    placeholder="Ej: 3000"
-                  />
-                </div>
+                {formData.account_type !== 'evaluation' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="profit_target">Profit Target ($) (Opcional)</Label>
+                    <Input
+                      id="profit_target"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.profit_target}
+                      onChange={(e) => setFormData({ ...formData, profit_target: parseFloat(e.target.value) || 0 })}
+                      placeholder="Ej: 3000"
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
