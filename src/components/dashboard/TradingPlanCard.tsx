@@ -189,7 +189,7 @@ export const TradingPlanCard = ({ plan, isLoading, onEdit }: TradingPlanCardProp
                                     <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
                                         <p className="font-medium text-sm text-foreground mb-1.5">{mainSetup.name}</p>
                                         {mainSetup.conditions?.length > 0 && (
-                                            <div className="space-y-1">
+                                            <div className="space-y-1 max-h-[200px] overflow-y-auto">
                                                 {mainSetup.conditions.map((c: string, i: number) => (
                                                     <p key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
                                                         <TrendingUp className="h-3 w-3 text-primary/60" />
