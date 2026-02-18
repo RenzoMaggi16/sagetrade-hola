@@ -467,7 +467,7 @@ export const Dashboard = () => {
               <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>
                 <div className="flex flex-col items-center gap-2 mt-2">
                   {/* Chart */}
-                  <div className="h-13 w-13">
+                  <div className="h-16 w-16">
                     <ProfitFactorChart
                       grossProfit={metrics?.grossProfit || 0}
                       grossLoss={metrics?.grossLoss || 0}
