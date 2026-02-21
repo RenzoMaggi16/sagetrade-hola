@@ -7,6 +7,10 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import TradeDetail from "./pages/TradeDetail";
 import AnalisisIA from "./pages/AnalisisIA";
+<<<<<<< HEAD
+=======
+import MentorIA from "./pages/MentorIA";
+>>>>>>> 74aa8f8 (Actualizacion Mentor IA)
 import MisReglas from "./pages/MisReglas";
 import ManageStrategies from "./pages/ManageStrategies";
 import ManageAccounts from "./pages/ManageAccounts";
@@ -34,6 +38,10 @@ const App = () => (
               <Route path="/trade/:id" element={<TradeDetail />} />
               <Route path="/trades" element={<TradesPage />} />
               <Route path="/analisis" element={<AnalisisIA />} />
+<<<<<<< HEAD
+=======
+              <Route path="/mentor" element={<MentorIA />} />
+>>>>>>> 74aa8f8 (Actualizacion Mentor IA)
               <Route path="/reglas" element={<MisReglas />} />
               <Route path="/estrategias" element={<ManageStrategies />} />
 
