@@ -14,8 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-<<<<<<< HEAD
-=======
       mentor_chat_messages: {
         Row: {
           id: string
@@ -40,7 +38,6 @@ export type Database = {
         }
         Relationships: []
       }
->>>>>>> 74aa8f8 (Actualizacion Mentor IA)
       rules: {
         Row: {
           created_at: string | null

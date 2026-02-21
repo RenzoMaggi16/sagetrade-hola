@@ -175,7 +175,7 @@ const MentorIA = () => {
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold bg-gradient-to-r from-violet-400 to-purple-300 bg-clip-text text-transparent">
-                                Mentor IA
+                                Alfred | Trading Mentor (BETA)
                             </h1>
                             <p className="text-sm text-muted-foreground">
                                 Analiza tu rendimiento y disciplina

@@ -261,18 +261,17 @@ export const useMentorIA = () => {
             ];
 
             // 4. Call Gemini API
-            const API_KEY = "AIzaSyAgbZZl6I9IVa7F-4x8tyzXl0zsxBUCj8Y";
+            const API_KEY = import.meta.env.VITE_GOOGLE_AI_KEY;
             abortRef.current = new AbortController();
 
+            if (!API_KEY) {
+                throw new Error("API Key de Google AI no configurada. Verifica tu archivo .env");
+            }
+
             const modelsToTry = [
-                "gemini-2.5-flash",
-                "gemini-1.5-flash-latest",
                 "gemini-1.5-flash",
-                "gemini-1.5-pro-latest",
                 "gemini-1.5-pro",
-                "gemini-1.0-pro-latest",
-                "gemini-1.0-pro",
-                "gemini-pro"
+                "gemini-1.0-pro"
             ];
 
             let response;
