@@ -33,12 +33,6 @@ export const Navbar = () => {
                 Dashboard
               </Button>
             </Link>
-            <Link to="/analisis">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <BrainCircuit className="h-4 w-4" />
-                Análisis IA
-              </Button>
-            </Link>
             <Link to="/mentor">
               <Button variant="ghost" size="sm" className="gap-2">
                 <BrainCircuit className="h-4 w-4" />
