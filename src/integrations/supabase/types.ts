@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      mentor_chat_messages: {
+        Row: {
+          id: string
+          user_id: string
+          role: 'user' | 'assistant'
+          content: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          role: 'user' | 'assistant'
+          content: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          role?: 'user' | 'assistant'
+          content?: string
+          created_at?: string | null
+        }
+        Relationships: []
+      }
       rules: {
         Row: {
           created_at: string | null
