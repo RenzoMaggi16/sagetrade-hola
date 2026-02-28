@@ -234,7 +234,9 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
       const riesgoValue = parseFloat(formData.riesgo) || null;
 
       // --- Validación contra Trading Plan ---
-      let isOutsidePlan = setupCompliance !== 'full';
+      // is_outside_plan is determined solely by the user's setup compliance answer.
+      // Automatic plan validations only trigger warnings, they do NOT override the user's answer.
+      const isOutsidePlan = setupCompliance !== 'full';
 
       try {
         const { data: planData } = await (supabase as any)
@@ -244,6 +246,8 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
           .maybeSingle();
 
         if (planData) {
+          let planWarning = false;
+
           // Check max_trades_per_day
           if (planData.max_trades_per_day != null && !tradeToEdit) {
             const todayStr = entryTimestamp.toISOString().split('T')[0];
@@ -255,7 +259,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
               .lte("entry_time", todayStr + "T23:59:59");
 
             if ((count || 0) >= planData.max_trades_per_day) {
-              isOutsidePlan = true;
+              planWarning = true;
             }
           }
 
@@ -263,7 +267,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
           if (planData.min_rr != null && riesgoValue && riesgoValue > 0) {
             const rr = pnlValue / riesgoValue;
             if (rr < planData.min_rr && pnlValue > 0) {
-              isOutsidePlan = true;
+              planWarning = true;
             }
           }
 
@@ -278,7 +282,7 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
             if (acct.data && acct.data.initial_capital > 0) {
               const riskPct = (riesgoValue / acct.data.initial_capital) * 100;
               if (riskPct > planData.risk_per_trade) {
-                isOutsidePlan = true;
+                planWarning = true;
               }
             }
           }
@@ -295,9 +299,14 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
             if (recentTrades && recentTrades.length >= planData.stop_after_consecutive_losses) {
               const allLosses = recentTrades.every((t: any) => t.pnl_neto < 0);
               if (allLosses) {
-                isOutsidePlan = true;
+                planWarning = true;
               }
             }
+          }
+
+          // Show warning if automatic validations detect issues, but do NOT change is_outside_plan
+          if (planWarning && setupCompliance === 'full') {
+            console.warn("Plan validation warning: Some plan rules were violated, but user confirmed full setup compliance.");
           }
         }
       } catch (planError) {
