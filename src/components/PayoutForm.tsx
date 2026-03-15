@@ -76,14 +76,15 @@ export const PayoutForm = () => {
     });
 
     // Fetch payouts for selected account
-    const { data: existingPayouts = [] } = useQuery({
+    const { data: existingPayouts = [] } = useQuery<{ amount: number; payout_date: string }[]>({
         queryKey: ["payouts", selectedAccountId],
         enabled: !!selectedAccountId,
         queryFn: async () => {
             const { data } = await supabase
                 .from("payouts")
-                .select("amount")
-                .eq("account_id", selectedAccountId);
+                .select("amount, payout_date")
+                .eq("account_id", selectedAccountId)
+                .order("payout_date", { ascending: true });
             return data ?? [];
         },
     });
@@ -105,13 +106,27 @@ export const PayoutForm = () => {
         if (!minDays || minDays <= 0) return null;
 
         // Group trades by date → sum PnL per day → count positive days
-        // Only count trades AFTER evaluation passed date
+        // Only count trades AFTER evaluation passed date AND AFTER the last payout
         const passDate = selectedAccount.evaluation_passed_at;
+        
+        let lastPayoutDate: Date | null = null;
+        if (existingPayouts && existingPayouts.length > 0) {
+            // existingPayouts is sorted ascending by payout_date, so the last one is the most recent
+            const latestPayout = existingPayouts[existingPayouts.length - 1];
+            if (latestPayout.payout_date) {
+                lastPayoutDate = new Date(latestPayout.payout_date);
+            }
+        }
+
         const dailyPnL = new Map<string, number>();
         trades.forEach((t: any) => {
             if (!t.entry_time) return;
-            if (passDate && new Date(t.entry_time).getTime() <= new Date(passDate).getTime()) return;
-            const dateStr = new Date(t.entry_time).toISOString().split('T')[0];
+            const tradeDate = new Date(t.entry_time);
+            
+            if (passDate && tradeDate.getTime() <= new Date(passDate).getTime()) return;
+            if (lastPayoutDate && tradeDate.getTime() <= lastPayoutDate.getTime()) return;
+            
+            const dateStr = tradeDate.toISOString().split('T')[0];
             dailyPnL.set(dateStr, (dailyPnL.get(dateStr) || 0) + Number(t.pnl_neto ?? 0));
         });
 
@@ -127,7 +142,7 @@ export const PayoutForm = () => {
             isCompleted: totalProfitDays >= minDays,
             withdrawalPct: pct || 100,
         };
-    }, [selectedAccount, trades]);
+    }, [selectedAccount, trades, existingPayouts]);
 
     // Compute real balance = initial + trades PnL - payouts
     // Umbral de retiro = capital inicial (para TODOS los tipos de cuenta)

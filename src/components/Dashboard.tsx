@@ -118,7 +118,7 @@ export const Dashboard = () => {
 
       const { data, error } = await supabase
         .from("payouts")
-        .select("id, payout_date, amount")
+        .select("id, payout_date, amount, account_id")
         .eq("account_id", selectedAccountId)
         .order("payout_date", { ascending: true });
 
@@ -457,11 +457,31 @@ export const Dashboard = () => {
               {selectedAccountId && (() => {
                 const acc = accounts.find(a => a.id === selectedAccountId);
                 if (!acc || acc.account_type !== 'live' || !acc.consistency_min_profit_days || acc.consistency_min_profit_days <= 0) return null;
-                // Only count trades AFTER account was passed
+                // Only count trades AFTER account was passed AND AFTER the latest payout
                 const passDate = acc.evaluation_passed_at;
-                const postPassTrades = passDate
-                  ? allTrades.filter(t => new Date(t.entry_time).getTime() > new Date(passDate).getTime())
-                  : allTrades;
+                
+                // Find latest payout for this account
+                const accountPayouts = payouts.filter(p => p.account_id === acc.id);
+                let lastPayoutDate: Date | null = null;
+                if (accountPayouts.length > 0) {
+                  // payouts is sorted ascending, so last is most recent
+                  const latestPayout = accountPayouts[accountPayouts.length - 1];
+                  if (latestPayout.payout_date) {
+                    lastPayoutDate = new Date(latestPayout.payout_date);
+                  }
+                }
+
+                const postPassTrades = allTrades.filter(t => {
+                  const tradeDate = new Date(t.entry_time);
+                  let includeTrade = true;
+                  if (passDate && tradeDate.getTime() <= new Date(passDate).getTime()) {
+                    includeTrade = false;
+                  }
+                  if (lastPayoutDate && tradeDate.getTime() <= lastPayoutDate.getTime()) {
+                    includeTrade = false;
+                  }
+                  return includeTrade;
+                });
                 return (
                   <ProfitDaysTracker
                     trades={postPassTrades.map(t => ({ pnl_neto: t.pnl_neto, entry_time: t.entry_time }))}
