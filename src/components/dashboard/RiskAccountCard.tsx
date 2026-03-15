@@ -1,16 +1,35 @@
-
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, TrendingDown, ShieldCheck, ShieldAlert, Ban, Trophy, DollarSign, Ruler, Target } from "lucide-react";
+import { AlertTriangle, TrendingDown, ShieldCheck, ShieldAlert, Ban, Trophy, DollarSign, Ruler, Target, PartyPopper } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Account {
   id: string;
   account_name: string;
+  account_type: 'personal' | 'evaluation' | 'live';
   initial_capital: number;
   current_capital: number;
   drawdown_type?: 'fixed' | 'trailing' | null;
   drawdown_amount?: number | null;
   highest_balance?: number | null;
   profit_target?: number | null;
+  evaluation_passed?: boolean;
 }
 
 interface RiskAccountCardProps {
@@ -21,6 +40,13 @@ interface RiskAccountCardProps {
 }
 
 export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmProp, profitTarget }: RiskAccountCardProps) => {
+  const [showPassDialog, setShowPassDialog] = useState(false);
+  const [wantsConsistency, setWantsConsistency] = useState(false);
+  const [minProfitDays, setMinProfitDays] = useState(5);
+  const [withdrawalPct, setWithdrawalPct] = useState(50);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const queryClient = useQueryClient();
+
   if (!account.drawdown_amount || account.drawdown_amount <= 0) {
     return null;
   }
@@ -33,16 +59,10 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
   let highWaterMark = account.initial_capital;
 
   if (drawdownType === 'fixed') {
-    // Fixed: limit is always initial_capital - drawdown
     lossLimit = account.initial_capital - drawdownAmount;
   } else {
-    // ── Trailing Drawdown ──
-    // HWM is computed from trade history in Dashboard (source of truth).
-    // Limit = HWM - drawdownAmount, but it FREEZES at initial_capital.
-    // Once HWM >= initial + drawdown, the trailing stops.
     highWaterMark = hwmProp ?? account.initial_capital;
     const trailingLimit = highWaterMark - drawdownAmount;
-    // Cap: the limit can never go above initial_capital (freeze point)
     lossLimit = Math.min(trailingLimit, account.initial_capital);
   }
 
@@ -56,8 +76,6 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
   if (isBreached) status = 'breached';
   else if (distanceToLimit <= criticalThreshold) status = 'warning';
 
-  // ── Progress bar percentage (how much margin remains) ────────
-  // 100% = full drawdown amount available, 0% = at the limit
   const usedDrawdown = drawdownAmount - distanceToLimit;
   const progressPct = Math.max(0, Math.min(100, ((drawdownAmount - Math.max(0, usedDrawdown)) / drawdownAmount) * 100));
 
@@ -88,6 +106,93 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 
+  // ── Profit Target Achievement ────────────────────────────────
+  const profitAchievement = useMemo(() => {
+    if (!profitTarget || profitTarget <= 0) return null;
+    const profitSoFar = currentBalance - account.initial_capital;
+    const remaining = profitTarget - profitSoFar;
+    const progressPctTarget = Math.max(0, Math.min(100, (profitSoFar / profitTarget) * 100));
+    const remainingPct = ((remaining / account.initial_capital) * 100);
+    const isAchieved = remaining <= 0;
+    const targetBalance = account.initial_capital + profitTarget;
+    return { profitSoFar, remaining, progressPctTarget, remainingPct, isAchieved, targetBalance };
+  }, [profitTarget, currentBalance, account.initial_capital]);
+
+  const isEvaluation = account.account_type === 'evaluation';
+  const showCongrats = isEvaluation && profitAchievement?.isAchieved && !account.evaluation_passed;
+
+  // ── Handle Account Pass ──────────────────────────────────────
+  const handleAccountPass = async () => {
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Usuario no autenticado");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 1. Change account type to 'live' and reset balance fields
+      const passedAt = new Date().toISOString();
+      const updateData: Record<string, any> = {
+        evaluation_passed: true,
+        evaluation_passed_at: passedAt,
+        account_type: 'live',
+        current_capital: account.initial_capital,
+        highest_balance: account.initial_capital,
+      };
+
+      if (wantsConsistency) {
+        updateData.consistency_min_profit_days = minProfitDays;
+        updateData.consistency_withdrawal_pct = withdrawalPct;
+      }
+
+      const { error: updateError } = await supabase
+        .from('accounts')
+        .update(updateData)
+        .eq('id', account.id);
+
+      if (updateError) {
+        console.error('Error updating account:', updateError);
+        toast.error("Error al actualizar la cuenta");
+        return;
+      }
+
+      // 2. Insert a reset payout to zero out accumulated PnL
+      //    Balance = initial + trades_pnl - payouts. To make it = initial,
+      //    we insert a payout equal to (currentBalance - initial_capital).
+      const accumulatedProfit = currentBalance - account.initial_capital;
+      if (accumulatedProfit > 0) {
+        const { error: payoutError } = await supabase
+          .from('payouts')
+          .insert({
+            user_id: user.id,
+            account_id: account.id,
+            amount: accumulatedProfit,
+            payout_date: new Date().toISOString(),
+            notes: '🔄 Reset automático por aprobación de evaluación',
+          });
+
+        if (payoutError) {
+          console.error('Error inserting reset payout:', payoutError);
+          // Non-critical: account type is already updated
+        }
+      }
+
+      toast.success("🎉 ¡Felicitaciones! Tu cuenta ahora es fondeada (Live).");
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+      queryClient.invalidateQueries({ queryKey: ['payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['payouts-list'] });
+      setShowPassDialog(false);
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error("Error al procesar la aprobación");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <Card className={`${cardBorderColor} transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md`}>
       {/* ── Header ── */}
@@ -106,6 +211,28 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
 
       {/* ── Content ── */}
       <CardContent className="px-4 pt-4 pb-4 space-y-4">
+
+        {/* 🎉 Congratulations Banner */}
+        {showCongrats && (
+          <div className="rounded-lg border-2 border-emerald-500/50 p-4 bg-gradient-to-r from-emerald-500/10 via-emerald-400/5 to-teal-500/10 animate-in fade-in slide-in-from-top-2 duration-500">
+            <div className="flex items-center gap-2 mb-2">
+              <PartyPopper className="h-5 w-5 text-emerald-400 animate-bounce" />
+              <span className="text-sm font-bold text-emerald-400">🎉 ¡Objetivo Alcanzado!</span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              ¡Felicitaciones! Alcanzaste el profit objetivo de {formatCurrency(profitTarget!)}. 
+              ¿Aprobaste la prueba de fondeo?
+            </p>
+            <Button
+              size="sm"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
+              onClick={() => setShowPassDialog(true)}
+            >
+              <Trophy className="h-4 w-4" />
+              ¡Aprobé la cuenta!
+            </Button>
+          </div>
+        )}
 
         {/* Balance Actual — hero stat */}
         <div className="flex items-center justify-between">
@@ -181,14 +308,8 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
         )}
 
         {/* Objetivo de Profit */}
-        {profitTarget && profitTarget > 0 && (() => {
-          const targetBalance = account.initial_capital + profitTarget;
-          const profitSoFar = currentBalance - account.initial_capital;
-          const remaining = profitTarget - profitSoFar;
-          const progressPctTarget = Math.max(0, Math.min(100, (profitSoFar / profitTarget) * 100));
-          const remainingPct = ((remaining / account.initial_capital) * 100);
-          const isAchieved = remaining <= 0;
-
+        {profitAchievement && (() => {
+          const { remaining, progressPctTarget, remainingPct, isAchieved, targetBalance } = profitAchievement;
           return (
             <>
               <div className="border-t border-border/40" />
@@ -218,7 +339,7 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground">
                   <span>{progressPctTarget.toFixed(0)}% completado</span>
-                  <span>{formatCurrency(profitTarget)}</span>
+                  <span>{formatCurrency(profitTarget!)}</span>
                 </div>
               </div>
             </>
@@ -226,6 +347,91 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
         })()}
 
       </CardContent>
+
+      {/* ── Account Pass Dialog ── */}
+      <AlertDialog open={showPassDialog} onOpenChange={setShowPassDialog}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-emerald-400">
+              <PartyPopper className="h-5 w-5" />
+              ¡Felicitaciones! 🎉
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4 pt-2">
+                <p className="text-sm text-muted-foreground">
+                  ¡Aprobaste la prueba de fondeo de <span className="font-bold text-foreground">{account.account_name}</span>!
+                  El balance se reseteará a {formatCurrency(account.initial_capital)}.
+                </p>
+
+                {/* Consistency Rule Toggle */}
+                <div className="rounded-lg border border-border/50 p-4 space-y-4 bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium">Regla de Consistencia</Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        ¿Tu empresa de fondeo pide regla de consistencia para retirar?
+                      </p>
+                    </div>
+                    <Switch
+                      checked={wantsConsistency}
+                      onCheckedChange={setWantsConsistency}
+                    />
+                  </div>
+
+                  {wantsConsistency && (
+                    <div className="space-y-3 pt-2 border-t border-border/30">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="min-profit-days" className="text-xs">
+                          Mínimo de días profit para retirar
+                        </Label>
+                        <Input
+                          id="min-profit-days"
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={minProfitDays}
+                          onChange={(e) => setMinProfitDays(parseInt(e.target.value) || 1)}
+                          className="h-8"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Ej: 5 = necesitás al menos 5 días con ganancia para poder retirar
+                        </p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="withdrawal-pct" className="text-xs">
+                          % del profit retirable
+                        </Label>
+                        <Input
+                          id="withdrawal-pct"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={withdrawalPct}
+                          onChange={(e) => setWithdrawalPct(parseInt(e.target.value) || 1)}
+                          className="h-8"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Ej: 50 = podés retirar hasta el 50% del profit generado
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleAccountPass}
+              disabled={isSubmitting}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {isSubmitting ? "Procesando..." : "Confirmar Aprobación"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

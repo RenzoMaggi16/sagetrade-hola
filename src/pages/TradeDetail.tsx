@@ -33,6 +33,7 @@ interface Trade {
   is_trade_of_day?: boolean;
   trade_of_day_image?: string | null;
   trade_of_day_notes?: string | null;
+  entry_types?: string[] | null;
   accounts?: {
     account_name: string;
   };
@@ -259,6 +260,29 @@ const TradeDetail = () => {
                 value={trade.setup_rating || 'N/A'}
               />
             </div>
+
+            {/* Tipo de Entrada */}
+            {trade.entry_types && trade.entry_types.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold mb-3">Tipo de Entrada</h3>
+                <div className="flex flex-wrap gap-2">
+                  {trade.entry_types.map((type) => {
+                    const badgeColors: Record<string, string> = {
+                      'IFVG': 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400',
+                      'OB': 'bg-violet-500/15 border-violet-500/40 text-violet-400',
+                      'NR': 'bg-amber-500/15 border-amber-500/40 text-amber-400',
+                      'BOS': 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400',
+                      'Sin setup': 'bg-red-600/20 border-red-500/50 text-red-500',
+                    };
+                    return (
+                      <Badge key={type} variant="outline" className={`px-3 py-1 text-sm font-semibold ${badgeColors[type] || 'bg-primary/10 border-primary/30 text-primary'}`}>
+                        {type}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* 🧠 Evaluación del Plan */}
             <div className={`mt-6 p-4 rounded-lg border flex flex-col gap-4 ${!trade.is_outside_plan

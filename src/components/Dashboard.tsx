@@ -19,6 +19,7 @@ import { useTradingPlan } from "@/hooks/useTradingPlan";
 import { useDisciplineMetrics } from "@/hooks/useDisciplineMetrics";
 import { DailyPsychologyQuote } from "@/components/dashboard/DailyPsychologyQuote";
 import { RiskAccountCard } from "@/components/dashboard/RiskAccountCard";
+import { ProfitDaysTracker } from "@/components/dashboard/ProfitDaysTracker";
 import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -46,6 +47,10 @@ interface Account {
   highest_balance?: number | null;
   profit_target?: number | null;
   funding_target_1?: number | null;
+  consistency_min_profit_days?: number | null;
+  consistency_withdrawal_pct?: number | null;
+  evaluation_passed?: boolean;
+  evaluation_passed_at?: string | null;
 }
 
 export const Dashboard = () => {
@@ -71,7 +76,7 @@ export const Dashboard = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, highest_balance, profit_target, funding_target_1')
+        .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, highest_balance, profit_target, funding_target_1, consistency_min_profit_days, consistency_withdrawal_pct, evaluation_passed, evaluation_passed_at')
         .order('created_at', { ascending: true }); // Oldest first = "First Created"
 
       if (error) throw error;
@@ -288,6 +293,7 @@ export const Dashboard = () => {
   const { equityCurveData, currentBalance, highWaterMark } = useMemo(() => {
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     const initialCapital = selectedAccount?.initial_capital || 0;
+    const passedAt = selectedAccount?.evaluation_passed_at;
 
     if (!allTrades || allTrades.length === 0) {
       return { equityCurveData: [], currentBalance: initialCapital, highWaterMark: initialCapital };
@@ -295,18 +301,23 @@ export const Dashboard = () => {
 
     const sortedAllTrades = [...allTrades].sort((a, b) => new Date(a.entry_time).getTime() - new Date(b.entry_time).getTime());
 
+    // For passed accounts, filter to only post-pass trades
+    const effectiveTrades = passedAt
+      ? sortedAllTrades.filter(t => new Date(t.entry_time).getTime() > new Date(passedAt).getTime())
+      : sortedAllTrades;
+
     let startBalance = initialCapital;
-    let filteredCurveTrades = sortedAllTrades;
+    let filteredCurveTrades = effectiveTrades;
 
     if (dateRange && dateRange.from) {
       const fromTime = startOfDay(dateRange.from).getTime();
       const toTime = dateRange.to ? endOfDay(dateRange.to).getTime() : endOfDay(dateRange.from).getTime();
 
-      const preTrades = sortedAllTrades.filter(t => new Date(t.entry_time).getTime() < fromTime);
+      const preTrades = effectiveTrades.filter(t => new Date(t.entry_time).getTime() < fromTime);
       const prePnL = preTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
       startBalance = initialCapital + prePnL;
 
-      filteredCurveTrades = sortedAllTrades.filter(t => {
+      filteredCurveTrades = effectiveTrades.filter(t => {
         const tTime = new Date(t.entry_time).getTime();
         return tTime >= fromTime && tTime <= toTime;
       });
@@ -322,13 +333,19 @@ export const Dashboard = () => {
       };
     });
 
-    const totalPnL = sortedAllTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
+    // Balance: for passed accounts, only count post-pass PnL
+    const effectivePnL = effectiveTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
+    // Payouts: the reset payout offsets pre-pass trades, so using all payouts is fine
     const totalPayouts = payouts.reduce((sum, p) => sum + Number(p.amount), 0);
-    const computedBalance = initialCapital + totalPnL - totalPayouts;
+    // But for passed accounts, we only count post-pass PnL directly (no reset payout needed in calc)
+    const computedBalance = passedAt
+      ? initialCapital + effectivePnL
+      : initialCapital + sortedAllTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0) - totalPayouts;
 
+    // HWM: for accounts that passed evaluation, only count trades AFTER pass date
     let hwm = initialCapital;
     let runningBalance = initialCapital;
-    for (const trade of sortedAllTrades) {
+    for (const trade of effectiveTrades) {
       runningBalance += Number(trade.pnl_neto);
       if (runningBalance > hwm) {
         hwm = runningBalance;
@@ -435,6 +452,24 @@ export const Dashboard = () => {
                   }
                 />
               )}
+
+              {/* Profit Days Tracker (for live accounts with consistency rules) */}
+              {selectedAccountId && (() => {
+                const acc = accounts.find(a => a.id === selectedAccountId);
+                if (!acc || acc.account_type !== 'live' || !acc.consistency_min_profit_days || acc.consistency_min_profit_days <= 0) return null;
+                // Only count trades AFTER account was passed
+                const passDate = acc.evaluation_passed_at;
+                const postPassTrades = passDate
+                  ? allTrades.filter(t => new Date(t.entry_time).getTime() > new Date(passDate).getTime())
+                  : allTrades;
+                return (
+                  <ProfitDaysTracker
+                    trades={postPassTrades.map(t => ({ pnl_neto: t.pnl_neto, entry_time: t.entry_time }))}
+                    minProfitDays={acc.consistency_min_profit_days}
+                    withdrawalPct={acc.consistency_withdrawal_pct || 100}
+                  />
+                );
+              })()}
 
               {/* Profit Factor Card — improved aesthetics */}
               <StatCard title="Profit Factor" value={metrics?.profitFactor ? (metrics.profitFactor === 100 && metrics.grossLoss === 0 ? "∞" : metrics.profitFactor.toFixed(2)) : "0.00"}>

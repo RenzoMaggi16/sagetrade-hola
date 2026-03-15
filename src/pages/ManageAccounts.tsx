@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, Wallet, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -28,6 +29,9 @@ interface FormData {
   drawdown_type: 'fixed' | 'trailing';
   drawdown_amount: number;
   profit_target: number;
+  has_consistency: boolean;
+  consistency_min_profit_days: number;
+  consistency_withdrawal_pct: number;
 }
 
 const ManageAccounts = () => {
@@ -47,6 +51,9 @@ const ManageAccounts = () => {
     drawdown_type: 'trailing',
     drawdown_amount: 0,
     profit_target: 0,
+    has_consistency: false,
+    consistency_min_profit_days: 5,
+    consistency_withdrawal_pct: 50,
   });
 
   // Cargar cuentas al montar el componente
@@ -98,6 +105,9 @@ const ManageAccounts = () => {
       drawdown_type: 'trailing',
       drawdown_amount: 0,
       profit_target: 0,
+      has_consistency: false,
+      consistency_min_profit_days: 5,
+      consistency_withdrawal_pct: 50,
     });
   };
 
@@ -116,6 +126,9 @@ const ManageAccounts = () => {
         drawdown_type: account.drawdown_type || 'trailing',
         drawdown_amount: account.drawdown_amount || 0,
         profit_target: account.profit_target || 0,
+        has_consistency: !!(account.consistency_min_profit_days && account.consistency_min_profit_days > 0),
+        consistency_min_profit_days: account.consistency_min_profit_days || 5,
+        consistency_withdrawal_pct: account.consistency_withdrawal_pct || 50,
       });
     } else {
       setEditingAccount(null);
@@ -197,6 +210,12 @@ const ManageAccounts = () => {
         drawdown_type: formData.drawdown_type,
         drawdown_amount: formData.drawdown_amount > 0 ? formData.drawdown_amount : null,
         profit_target: formData.profit_target > 0 ? formData.profit_target : null,
+        consistency_min_profit_days: formData.account_type === 'live' && formData.has_consistency
+          ? formData.consistency_min_profit_days
+          : null,
+        consistency_withdrawal_pct: formData.account_type === 'live' && formData.has_consistency
+          ? formData.consistency_withdrawal_pct
+          : null,
       };
 
       if (editingAccount) {
@@ -549,6 +568,57 @@ const ManageAccounts = () => {
                   </div>
                 )}
               </div>
+
+              {/* Consistency Rules (only for Live accounts) */}
+              {formData.account_type === 'live' && (
+                <div className="rounded-lg border border-border/50 p-4 space-y-4 bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium">Regla de Consistencia</Label>
+                      <p className="text-xs text-muted-foreground">
+                        ¿Tu empresa de fondeo pide regla de consistencia para retirar?
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.has_consistency}
+                      onCheckedChange={(checked) => setFormData({ ...formData, has_consistency: checked })}
+                    />
+                  </div>
+
+                  {formData.has_consistency && (
+                    <div className="space-y-3 pt-2 border-t border-border/30">
+                      <div className="grid gap-2">
+                        <Label htmlFor="consistency_days">Mínimo de días profit consecutivos</Label>
+                        <Input
+                          id="consistency_days"
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={formData.consistency_min_profit_days}
+                          onChange={(e) => setFormData({ ...formData, consistency_min_profit_days: parseInt(e.target.value) || 1 })}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Ej: 5 = necesitás al menos 5 días consecutivos con ganancia
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="consistency_pct">% del profit retirable</Label>
+                        <Input
+                          id="consistency_pct"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={formData.consistency_withdrawal_pct}
+                          onChange={(e) => setFormData({ ...formData, consistency_withdrawal_pct: parseInt(e.target.value) || 1 })}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Ej: 50 = podés retirar hasta el 50% del profit generado
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>

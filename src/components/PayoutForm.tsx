@@ -8,7 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Banknote, Lock, AlertTriangle, ShieldCheck } from "lucide-react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CalendarIcon, Banknote, Lock, AlertTriangle, ShieldCheck, CalendarCheck, Flame, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -22,6 +32,9 @@ interface Account {
     current_capital: number;
     drawdown_type?: 'fixed' | 'trailing' | null;
     drawdown_amount?: number | null;
+    consistency_min_profit_days?: number | null;
+    consistency_withdrawal_pct?: number | null;
+    evaluation_passed_at?: string | null;
 }
 
 export const PayoutForm = () => {
@@ -30,9 +43,10 @@ export const PayoutForm = () => {
     const [payoutDate, setPayoutDate] = useState<Date>(new Date());
     const [notes, setNotes] = useState<string>("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const queryClient = useQueryClient();
 
-    // Fetch accounts
+    // Fetch accounts — exclude evaluation accounts
     const { data: accounts = [] } = useQuery({
         queryKey: ["accounts"],
         queryFn: async () => {
@@ -40,21 +54,22 @@ export const PayoutForm = () => {
             if (!user) return [];
             const { data } = await supabase
                 .from('accounts')
-                .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount')
+                .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, consistency_min_profit_days, consistency_withdrawal_pct, evaluation_passed_at')
                 .eq('user_id', user.id)
+                .neq('account_type', 'evaluation')
                 .order('created_at', { ascending: false });
             return (data ?? []) as Account[];
         },
     });
 
-    // Fetch trades for selected account (to compute real balance)
+    // Fetch trades for selected account (with entry_time for profit days calc)
     const { data: trades = [] } = useQuery({
         queryKey: ["payout-trades", selectedAccountId],
         enabled: !!selectedAccountId,
         queryFn: async () => {
             const { data } = await supabase
                 .from("trades")
-                .select("pnl_neto")
+                .select("pnl_neto, entry_time")
                 .eq("account_id", selectedAccountId);
             return data ?? [];
         },
@@ -82,47 +97,84 @@ export const PayoutForm = () => {
 
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
 
+    // Calculate profit days for consistency rule
+    const profitDaysInfo = useMemo(() => {
+        if (!selectedAccount) return null;
+        const minDays = selectedAccount.consistency_min_profit_days;
+        const pct = selectedAccount.consistency_withdrawal_pct;
+        if (!minDays || minDays <= 0) return null;
+
+        // Group trades by date → sum PnL per day → count positive days
+        // Only count trades AFTER evaluation passed date
+        const passDate = selectedAccount.evaluation_passed_at;
+        const dailyPnL = new Map<string, number>();
+        trades.forEach((t: any) => {
+            if (!t.entry_time) return;
+            if (passDate && new Date(t.entry_time).getTime() <= new Date(passDate).getTime()) return;
+            const dateStr = new Date(t.entry_time).toISOString().split('T')[0];
+            dailyPnL.set(dateStr, (dailyPnL.get(dateStr) || 0) + Number(t.pnl_neto ?? 0));
+        });
+
+        // Sort days chronologically and count CONSECUTIVE profit days
+        // A losing day resets the streak to 0
+        const sortedDays = [...dailyPnL.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        let consecutiveProfitDays = 0;
+        for (const [, pnl] of sortedDays) {
+            if (pnl > 0) {
+                consecutiveProfitDays++;
+            } else {
+                consecutiveProfitDays = 0; // Reset on losing/breakeven day
+            }
+        }
+
+        return {
+            profitDays: consecutiveProfitDays,
+            minDays,
+            isCompleted: consecutiveProfitDays >= minDays,
+            withdrawalPct: pct || 100,
+        };
+    }, [selectedAccount, trades]);
+
     // Compute real balance = initial + trades PnL - payouts
+    // Umbral de retiro = capital inicial (para TODOS los tipos de cuenta)
     const { realBalance, withdrawalThreshold, maxWithdrawal, canWithdraw, thresholdLabel } = useMemo(() => {
         if (!selectedAccount) {
             return { realBalance: 0, withdrawalThreshold: 0, maxWithdrawal: 0, canWithdraw: false, thresholdLabel: '' };
         }
 
         const initial = selectedAccount.initial_capital;
-        const totalPnL = trades.reduce((sum, t) => sum + Number(t.pnl_neto ?? 0), 0);
-        const totalPayouts = existingPayouts.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
+        const totalPnL = trades.reduce((sum: number, t: any) => sum + Number(t.pnl_neto ?? 0), 0);
+        const totalPayouts = existingPayouts.reduce((sum: number, p: any) => sum + Number(p.amount ?? 0), 0);
         const balance = initial + totalPnL - totalPayouts;
 
-        const drawdownType = selectedAccount.drawdown_type || null;
-        const drawdownAmount = selectedAccount.drawdown_amount || 0;
+        // Umbral siempre es el capital inicial
+        const threshold = initial;
+        const label = `Capital Inicial ($${initial.toLocaleString('en-US', { minimumFractionDigits: 0 })})`;
 
-        let threshold = initial; // Default: can withdraw above initial capital
-        let label = `Capital Inicial ($${initial.toLocaleString('en-US', { minimumFractionDigits: 0 })})`;
+        let max = Math.max(0, balance - threshold);
 
-        if (drawdownType === 'trailing' && drawdownAmount > 0) {
-            // Trailing: must exceed initial + drawdown before withdrawing
-            threshold = initial + drawdownAmount;
-            label = `Capital Inicial + Drawdown ($${initial.toLocaleString('en-US', { minimumFractionDigits: 0 })} + $${drawdownAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })})`;
-        } else if (drawdownType === 'fixed' && drawdownAmount > 0) {
-            // Fixed: can withdraw above initial capital
-            threshold = initial;
-            label = `Capital Inicial ($${initial.toLocaleString('en-US', { minimumFractionDigits: 0 })})`;
+        // Apply consistency rule: limit max withdrawal to % of profit
+        if (profitDaysInfo && profitDaysInfo.withdrawalPct < 100) {
+            const profitAmount = balance - initial;
+            const allowedByPct = Math.max(0, profitAmount * (profitDaysInfo.withdrawalPct / 100));
+            max = Math.min(max, allowedByPct);
         }
-        // No drawdown set = no restriction (threshold = initial)
 
-        const max = Math.max(0, balance - threshold);
-        const eligible = balance > threshold;
+        // If consistency rule not met, block withdrawals
+        const consistencyBlocked = profitDaysInfo && !profitDaysInfo.isCompleted;
+        const eligible = balance > threshold && !consistencyBlocked;
 
         return {
             realBalance: balance,
             withdrawalThreshold: threshold,
-            maxWithdrawal: max,
+            maxWithdrawal: eligible ? max : 0,
             canWithdraw: eligible,
             thresholdLabel: label,
         };
-    }, [selectedAccount, trades, existingPayouts]);
+    }, [selectedAccount, trades, existingPayouts, profitDaysInfo]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    // Pre-validate and show confirmation dialog
+    const handlePreSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!selectedAccountId) {
@@ -140,6 +192,14 @@ export const PayoutForm = () => {
             toast.error(`El monto máximo de retiro es $${maxWithdrawal.toFixed(2)}`);
             return;
         }
+
+        setShowConfirmDialog(true);
+    };
+
+    // Execute the actual withdrawal after user confirms
+    const handleConfirmedSubmit = async () => {
+        setShowConfirmDialog(false);
+        const amountValue = parseFloat(amount);
 
         setIsSubmitting(true);
 
@@ -205,8 +265,8 @@ export const PayoutForm = () => {
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Account Selector */}
+                <form onSubmit={handlePreSubmit} className="space-y-6">
+                    {/* Account Selector — evaluation accounts are excluded from fetch */}
                     <div className="space-y-2">
                         <Label>Cuenta</Label>
                         <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
@@ -216,7 +276,7 @@ export const PayoutForm = () => {
                             <SelectContent>
                                 {accounts.map((acc) => (
                                     <SelectItem key={acc.id} value={acc.id}>
-                                        {acc.account_type === 'live' ? '🏦 ' : acc.account_type === 'evaluation' ? '🧪 ' : '👤 '}
+                                        {acc.account_type === 'live' ? '🏦 ' : '👤 '}
                                         {acc.account_name}
                                     </SelectItem>
                                 ))}
@@ -236,6 +296,47 @@ export const PayoutForm = () => {
                                 <span className="text-sm font-medium text-muted-foreground">{formatCurrency(withdrawalThreshold)}</span>
                             </div>
 
+                            {/* Profit Days Progress (for accounts with consistency rules) */}
+                            {profitDaysInfo && (
+                                <div className={`rounded-md p-3 border space-y-2 ${
+                                    profitDaysInfo.isCompleted
+                                        ? 'bg-emerald-500/10 border-emerald-500/30'
+                                        : 'bg-sky-500/10 border-sky-500/30'
+                                }`}>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                            <CalendarCheck className="h-3.5 w-3.5 text-sky-400" />
+                                            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Días Profit</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            {profitDaysInfo.isCompleted
+                                                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                                : <Flame className="h-3.5 w-3.5 text-sky-400" />
+                                            }
+                                            <span className={`text-sm font-bold ${profitDaysInfo.isCompleted ? 'text-emerald-400' : 'text-sky-400'}`}>
+                                                {profitDaysInfo.profitDays} / {profitDaysInfo.minDays}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-muted/40 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-500 ${profitDaysInfo.isCompleted ? 'bg-emerald-500' : 'bg-sky-500'}`}
+                                            style={{ width: `${Math.min(100, (profitDaysInfo.profitDays / profitDaysInfo.minDays) * 100)}%` }}
+                                        />
+                                    </div>
+                                    {!profitDaysInfo.isCompleted && (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Necesitás {profitDaysInfo.minDays - profitDaysInfo.profitDays} días profit más para poder retirar
+                                        </p>
+                                    )}
+                                    {profitDaysInfo.isCompleted && profitDaysInfo.withdrawalPct < 100 && (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Podés retirar hasta el {profitDaysInfo.withdrawalPct}% de tu profit
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             {canWithdraw ? (
                                 <div className="flex items-center gap-2 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30">
                                     <ShieldCheck className="h-4 w-4 text-emerald-500 flex-shrink-0" />
@@ -252,20 +353,24 @@ export const PayoutForm = () => {
                                     <div>
                                         <p className="text-xs font-medium text-amber-400">Retiro bloqueado</p>
                                         <p className="text-xs text-muted-foreground">
-                                            Tu balance debe superar {thresholdLabel} para poder retirar.
+                                            {profitDaysInfo && !profitDaysInfo.isCompleted
+                                                ? `Necesitás cumplir ${profitDaysInfo.minDays} días profit (tenés ${profitDaysInfo.profitDays}).`
+                                                : `Tu balance debe superar ${thresholdLabel} para poder retirar.`
+                                            }
                                         </p>
                                     </div>
                                 </div>
                             )}
 
                             {selectedAccount.drawdown_type === 'trailing' && canWithdraw && (
-                                <div className="flex items-start gap-2 p-2 rounded-md bg-violet-500/10 border border-violet-500/30">
-                                    <AlertTriangle className="h-4 w-4 text-violet-400 flex-shrink-0 mt-0.5" />
+                                <div className="flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/30">
+                                    <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
                                     <div>
-                                        <p className="text-xs font-medium text-violet-400">⚠️ Precaución</p>
+                                        <p className="text-xs font-medium text-amber-400">⚠️ Cuenta con Drawdown Trailing</p>
                                         <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                            Tu drawdown está congelado en {formatCurrency(selectedAccount.initial_capital)}.
-                                            Retirar todo el margen te deja sin colchón. Se recomienda dejar al menos {formatCurrency(selectedAccount.drawdown_amount || 0)} de margen.
+                                            Al retirar fondos, tu margen de drawdown se reducirá proporcionalmente.
+                                            Drawdown actual: <span className="font-bold text-amber-400">{formatCurrency(selectedAccount.drawdown_amount || 0)}</span>.
+                                            Se te pedirá confirmación antes de procesar el retiro.
                                         </p>
                                     </div>
                                 </div>
@@ -347,6 +452,69 @@ export const PayoutForm = () => {
                         )}
                     </Button>
                 </form>
+
+                {/* Confirmation Dialog */}
+                <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-amber-400">
+                                <AlertTriangle className="h-5 w-5" />
+                                Confirmar Retiro
+                            </AlertDialogTitle>
+                            <AlertDialogDescription asChild>
+                                <div className="space-y-3 pt-2">
+                                    <p className="text-sm text-muted-foreground">
+                                        Estás por retirar <span className="font-bold text-foreground">{formatCurrency(parseFloat(amount) || 0)}</span> de tu cuenta.
+                                    </p>
+
+                                    <div className="rounded-lg border border-border/50 p-3 space-y-2 bg-muted/30">
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-muted-foreground">Balance actual</span>
+                                            <span className="font-medium">{formatCurrency(realBalance)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-muted-foreground">Monto del retiro</span>
+                                            <span className="font-medium text-red-400">- {formatCurrency(parseFloat(amount) || 0)}</span>
+                                        </div>
+                                        <hr className="border-border/30" />
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-muted-foreground">Balance post-retiro</span>
+                                            <span className="font-bold text-foreground">{formatCurrency(realBalance - (parseFloat(amount) || 0))}</span>
+                                        </div>
+                                    </div>
+
+                                    {selectedAccount?.drawdown_type === 'trailing' && selectedAccount.drawdown_amount && selectedAccount.drawdown_amount > 0 && (
+                                        <div className="rounded-lg border border-amber-500/30 p-3 space-y-2 bg-amber-500/5">
+                                            <p className="text-xs font-medium text-amber-400">⚠️ Impacto en Drawdown Trailing</p>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-muted-foreground">Drawdown actual</span>
+                                                <span className="font-medium">{formatCurrency(selectedAccount.drawdown_amount)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-muted-foreground">Drawdown post-retiro</span>
+                                                <span className="font-bold text-amber-400">
+                                                    {formatCurrency(Math.max(0, selectedAccount.drawdown_amount - (parseFloat(amount) || 0)))}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                                                Al retirar, tu margen de drawdown se reduce. Esto significa que tendrás menos margen antes de alcanzar el límite de pérdida.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmedSubmit}
+                                className="bg-emerald-600 hover:bg-emerald-700"
+                            >
+                                Confirmar Retiro
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </CardContent>
         </Card>
     );

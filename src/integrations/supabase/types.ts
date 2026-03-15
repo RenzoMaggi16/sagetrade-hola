@@ -80,6 +80,10 @@ export type Database = {
           drawdown_amount: number | null
           profit_target: number | null
           highest_balance: number | null
+          consistency_min_profit_days: number | null
+          consistency_withdrawal_pct: number | null
+          evaluation_passed: boolean
+          evaluation_passed_at: string | null
         }
         Insert: {
           id?: string
@@ -98,6 +102,10 @@ export type Database = {
           drawdown_amount?: number | null
           profit_target?: number | null
           highest_balance?: number | null
+          consistency_min_profit_days?: number | null
+          consistency_withdrawal_pct?: number | null
+          evaluation_passed?: boolean
+          evaluation_passed_at?: string | null
         }
         Update: {
           id?: string
@@ -116,6 +124,10 @@ export type Database = {
           drawdown_amount?: number | null
           profit_target?: number | null
           highest_balance?: number | null
+          consistency_min_profit_days?: number | null
+          consistency_withdrawal_pct?: number | null
+          evaluation_passed?: boolean
+          evaluation_passed_at?: string | null
         }
         Relationships: []
       }
@@ -170,6 +182,7 @@ export type Database = {
           is_trade_of_day: boolean
           trade_of_day_image: string | null
           trade_of_day_notes: string | null
+          entry_types: string[] | null
           created_at: string | null
         }
         Insert: {
@@ -192,6 +205,7 @@ export type Database = {
           is_trade_of_day?: boolean
           trade_of_day_image?: string | null
           trade_of_day_notes?: string | null
+          entry_types?: string[] | null
           created_at?: string | null
         }
         Update: {
@@ -214,6 +228,7 @@ export type Database = {
           is_trade_of_day?: boolean
           trade_of_day_image?: string | null
           trade_of_day_notes?: string | null
+          entry_types?: string[] | null
           created_at?: string | null
         }
         Relationships: []
