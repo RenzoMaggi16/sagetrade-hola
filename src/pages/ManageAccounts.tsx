@@ -364,7 +364,7 @@ const ManageAccounts = () => {
               Nueva Cuenta
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingAccount ? 'Editar Cuenta' : 'Nueva Cuenta'}
@@ -571,12 +571,12 @@ const ManageAccounts = () => {
 
               {/* Consistency Rules (only for Live accounts) */}
               {formData.account_type === 'live' && (
-                <div className="rounded-lg border border-border/50 p-4 space-y-4 bg-muted/20">
+                <div className="rounded-lg border border-border/50 p-3 space-y-3 bg-muted/20">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label className="text-sm font-medium">Regla de Consistencia</Label>
-                      <p className="text-xs text-muted-foreground">
-                        ¿Tu empresa de fondeo pide regla de consistencia para retirar?
+                      <p className="text-[11px] text-muted-foreground">
+                        ¿Tu empresa de fondeo pide regla de consistencia?
                       </p>
                     </div>
                     <Switch
@@ -586,9 +586,9 @@ const ManageAccounts = () => {
                   </div>
 
                   {formData.has_consistency && (
-                    <div className="space-y-3 pt-2 border-t border-border/30">
-                      <div className="grid gap-2">
-                        <Label htmlFor="consistency_days">Mínimo de días profit consecutivos</Label>
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
+                      <div className="grid gap-1">
+                        <Label htmlFor="consistency_days" className="text-xs">Días profit consecutivos</Label>
                         <Input
                           id="consistency_days"
                           type="number"
@@ -597,12 +597,9 @@ const ManageAccounts = () => {
                           value={formData.consistency_min_profit_days}
                           onChange={(e) => setFormData({ ...formData, consistency_min_profit_days: parseInt(e.target.value) || 1 })}
                         />
-                        <p className="text-xs text-muted-foreground">
-                          Ej: 5 = necesitás al menos 5 días consecutivos con ganancia
-                        </p>
                       </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="consistency_pct">% del profit retirable</Label>
+                      <div className="grid gap-1">
+                        <Label htmlFor="consistency_pct" className="text-xs">% profit retirable</Label>
                         <Input
                           id="consistency_pct"
                           type="number"
@@ -611,9 +608,6 @@ const ManageAccounts = () => {
                           value={formData.consistency_withdrawal_pct}
                           onChange={(e) => setFormData({ ...formData, consistency_withdrawal_pct: parseInt(e.target.value) || 1 })}
                         />
-                        <p className="text-xs text-muted-foreground">
-                          Ej: 50 = podés retirar hasta el 50% del profit generado
-                        </p>
                       </div>
                     </div>
                   )}
