@@ -21,8 +21,9 @@ import { DailyPsychologyQuote } from "@/components/dashboard/DailyPsychologyQuot
 import { RiskAccountCard } from "@/components/dashboard/RiskAccountCard";
 import { ProfitDaysTracker } from "@/components/dashboard/ProfitDaysTracker";
 import { DayTradesModal } from "@/components/dashboard/DayTradesModal";
-import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay } from "date-fns";
+import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
 
 export type CalendarDisplayMode = 'dollars' | 'percentage';
 import { DateRange } from "react-day-picker";
@@ -62,6 +63,7 @@ export const Dashboard = () => {
     return (saved === 'percentage' ? 'percentage' : 'dollars') as CalendarDisplayMode;
   });
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   // Day trades modal state
   const [dayModalOpen, setDayModalOpen] = useState(false);
@@ -295,6 +297,52 @@ export const Dashboard = () => {
     };
   }, [trades, accounts, selectedAccountId, dateRange]);
 
+  const { weeklySummaries, monthlyWinRate, monthlyPayout, monthlyDailyData, monthlyTotalPnl, monthlyProfitTotal, monthlyLossTotal } = useMemo(() => {
+    const monthStart = startOfMonth(calendarMonth);
+    const monthEnd = endOfMonth(calendarMonth);
+    const monthlyTrades = trades.filter(t => {
+      const d = parseISO(t.entry_time);
+      return isWithinInterval(d, { start: monthStart, end: monthEnd });
+    });
+    const byWeek = new Map<string, { weekStart: Date; pnl: number; wins: number; losses: number }>();
+    monthlyTrades.forEach(t => {
+      const d = parseISO(t.entry_time);
+      const ws = startOfWeek(d, { weekStartsOn: 0 });
+      const key = format(ws, 'yyyy-MM-dd');
+      const cur = byWeek.get(key) || { weekStart: ws, pnl: 0, wins: 0, losses: 0 };
+      cur.pnl += Number(t.pnl_neto);
+      if (t.pnl_neto > 0) cur.wins += 1;
+      else if (t.pnl_neto < 0) cur.losses += 1;
+      byWeek.set(key, cur);
+    });
+    const weeklySummaries = Array.from(byWeek.values()).sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime()).map(w => {
+      const end = endOfWeek(w.weekStart, { weekStartsOn: 0 });
+      const nonBreakeven = w.wins + w.losses;
+      const wr = nonBreakeven > 0 ? (w.wins / nonBreakeven) * 100 : 0;
+      return {
+        label: `${format(w.weekStart, 'd MMM', { locale: es })} - ${format(end, 'd MMM', { locale: es })}`,
+        pnl: w.pnl,
+        winRate: wr,
+      };
+    });
+    const wins = monthlyTrades.filter(t => t.pnl_neto > 0).length;
+    const losses = monthlyTrades.filter(t => t.pnl_neto < 0).length;
+    const monthlyWinRate = (wins + losses) > 0 ? (wins / (wins + losses)) * 100 : 0;
+    const monthlyPayout = payouts.filter(p => {
+      const d = parseISO(p.payout_date);
+      return isWithinInterval(d, { start: monthStart, end: monthEnd });
+    }).reduce((sum, p) => sum + Number(p.amount), 0);
+    const dailyMap = new Map<string, number>();
+    monthlyTrades.forEach(t => {
+      const ds = format(parseISO(t.entry_time), 'dd/MM');
+      dailyMap.set(ds, (dailyMap.get(ds) || 0) + Number(t.pnl_neto));
+    });
+    const monthlyDailyData = Array.from(dailyMap.entries()).map(([day, pnl]) => ({ day, pnl }));
+    const monthlyTotalPnl = monthlyTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
+    const monthlyProfitTotal = monthlyTrades.reduce((sum, t) => sum + (t.pnl_neto > 0 ? Number(t.pnl_neto) : 0), 0);
+    const monthlyLossTotal = Math.abs(monthlyTrades.reduce((sum, t) => sum + (t.pnl_neto < 0 ? Number(t.pnl_neto) : 0), 0));
+    return { weeklySummaries, monthlyWinRate, monthlyPayout, monthlyDailyData, monthlyTotalPnl, monthlyProfitTotal, monthlyLossTotal };
+  }, [trades, payouts, calendarMonth]);
   // Equity Curve Data & Current Balance Calculation
   const { equityCurveData, currentBalance, highWaterMark } = useMemo(() => {
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
@@ -497,6 +545,8 @@ export const Dashboard = () => {
                     trades={postPassTrades.map(t => ({ pnl_neto: t.pnl_neto, entry_time: t.entry_time }))}
                     minProfitDays={acc.consistency_min_profit_days}
                     withdrawalPct={acc.consistency_withdrawal_pct || 100}
+                    initialCapital={acc.initial_capital}
+                    currentBalance={currentBalance}
                   />
                 );
               })()}
@@ -549,52 +599,126 @@ export const Dashboard = () => {
               </StatCard>
             </div>
 
-            {/* Right Column: Calendar + Daily Stats */}
-            <div className="col-span-1 md:col-span-3 space-y-4">
-              <PnLCalendar
-                trades={trades}
-                payouts={payouts}
-                displayMode={displayMode}
-                initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
-                onDayClick={(date, tradeIds) => {
-                  setDayModalDate(date);
-                  setDayModalTradeIds(tradeIds);
-                  setDayModalOpen(true);
-                }}
-              />
-              <DailyPerformanceStats
-                trades={trades}
-                displayMode={displayMode}
-                initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
-              />
+            <div className="col-span-1 md:col-span-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-3 space-y-4">
+                  <PnLCalendar
+                    trades={trades}
+                    payouts={payouts}
+                    displayMode={displayMode}
+                    initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
+                    onDayClick={(date, tradeIds) => {
+                      setDayModalDate(date);
+                      setDayModalTradeIds(tradeIds);
+                      setDayModalOpen(true);
+                    }}
+                    onMonthChange={(m) => setCalendarMonth(m)}
+                  />
+                  <DailyPerformanceStats
+                    trades={trades}
+                    displayMode={displayMode}
+                    initialCapital={accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0}
+                  />
+                </div>
+                <div className="md:col-span-1 md:min-h-[640px] flex flex-col space-y-4">
+                  <StatCard title="PNL por Semana" className="flex-1">
+                    <div className="space-y-2">
+                      {weeklySummaries.map((w, idx) => (
+                        <div key={idx} className="flex items-center justify-between rounded-md border border-border/40 px-4 py-3">
+                          <div className="text-sm text-muted-foreground">{w.label}</div>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-lg font-semibold ${w.pnl >= 0 ? 'text-[var(--profit-color)]' : 'text-[var(--loss-color)]'}`}>
+                              ${Math.abs(w.pnl).toFixed(2)}
+                            </span>
+                            <span className="text-sm font-medium">{w.winRate.toFixed(0)}%</span>
+                          </div>
+                        </div>
+                      ))}
+                      {weeklySummaries.length === 0 && (
+                        <div className="text-xs text-muted-foreground">Sin datos en el mes seleccionado</div>
+                      )}
+                    </div>
+                  </StatCard>
+                  <StatCard
+                    title="Resumen Mensual"
+                    value={<span className="text-2xl font-bold">{monthlyWinRate.toFixed(1)}%</span>}
+                    subValue="Win Rate del mes"
+                    className="flex-1"
+                  >
+                    <div className="flex items-center justify-between rounded-md border border-border/40 px-4 py-3">
+                      <span className="text-sm text-muted-foreground">Retiros</span>
+                      <span className="text-base font-semibold text-violet-400">
+                        ${monthlyPayout.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="mt-3 rounded-md border border-border/30 bg-muted/10 p-2">
+                      <div className="text-xs text-muted-foreground mb-1">PNL diario</div>
+                      <div className="h-[120px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={monthlyDailyData}>
+                            <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                            <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                            <YAxis hide />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: '#1e1e1e', border: 'none' }}
+                              formatter={(value: number) => [`$${Number(value).toFixed(2)}`, 'PnL']}
+                            />
+                            <Bar dataKey="pnl">
+                              {monthlyDailyData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? 'var(--profit-color)' : 'var(--loss-color)'} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                        <div className="rounded-md border border-border/30 p-2 text-center">
+                          <div className="text-muted-foreground">Total</div>
+                          <div className={`font-semibold ${monthlyTotalPnl >= 0 ? 'text-[var(--profit-color)]' : 'text-[var(--loss-color)]'}`}>
+                            ${(Math.abs(monthlyTotalPnl)).toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="rounded-md border border-border/30 p-2 text-center">
+                          <div className="text-muted-foreground">Profit</div>
+                          <div className="font-semibold text-[var(--profit-color)]">
+                            ${monthlyProfitTotal.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="rounded-md border border-border/30 p-2 text-center">
+                          <div className="text-muted-foreground">Loss</div>
+                          <div className="font-semibold text-[var(--loss-color)]">
+                            -${monthlyLossTotal.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </StatCard>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Trading Plan Sidebar */}
-        <div className="w-full lg:w-[320px] xl:w-[360px] shrink-0 space-y-4">
-          <TradingPlanCard
-            plan={plan}
-            isLoading={isLoadingPlan}
-            onEdit={() => setIsPlanModalOpen(true)}
-          />
-          <DisciplineCard
-            metrics={disciplineMetrics}
-            hasPlan={!!plan}
-          />
-        </div>
       </div>
 
-      {/* Balance Card — full width, below all content */}
-      <StatCard title="Balance" value={
-        displayMode === 'percentage' && (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0) > 0
-          ? `${(((currentBalance - (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0)) / (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1)) * 100).toFixed(2)}%`
-          : `$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-      }>
-        <div className="min-h-[280px]">
-          <EquityChart data={equityCurveData.map(d => ({ date: d.date, cumulativePnl: d.cumulativePnl }))} />
-        </div>
-      </StatCard>
+      {/* Trading Plan + Balance side-by-side (full width row) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TradingPlanCard
+          plan={plan}
+          isLoading={isLoadingPlan}
+          onEdit={() => setIsPlanModalOpen(true)}
+        />
+        <StatCard title="Balance" value={
+          displayMode === 'percentage' && (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0) > 0
+            ? `${(((currentBalance - (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0)) / (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 1)) * 100).toFixed(2)}%`
+            : `$${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+        }>
+          <div className="min-h-[420px] md:min-h-[480px]">
+            <EquityChart data={equityCurveData.map(d => ({ date: d.date, cumulativePnl: d.cumulativePnl }))} />
+          </div>
+        </StatCard>
+      </div>
+
 
       {/* Trading Plan Edit Modal */}
       <TradingPlanEditModal

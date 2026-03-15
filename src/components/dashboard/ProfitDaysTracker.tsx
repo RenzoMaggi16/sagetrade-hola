@@ -11,9 +11,11 @@ interface ProfitDaysTrackerProps {
   trades: Trade[];
   minProfitDays: number;
   withdrawalPct: number;
+  initialCapital: number;
+  currentBalance: number;
 }
 
-export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct }: ProfitDaysTrackerProps) => {
+export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct, initialCapital, currentBalance }: ProfitDaysTrackerProps) => {
   const { profitDays, totalDays, isCompleted } = useMemo(() => {
     // Group trades by date, sum PnL per day
     const dailyPnL = new Map<string, number>();
@@ -38,6 +40,8 @@ export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct }: Prof
   }, [trades, minProfitDays]);
 
   const progressPct = Math.min(100, (profitDays / minProfitDays) * 100);
+  const withdrawableProfit = Math.max(0, currentBalance - initialCapital);
+  const nextWithdrawalEstimate = withdrawableProfit * (withdrawalPct / 100);
 
   return (
     <Card className={`border-l-4 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md ${isCompleted ? 'border-l-emerald-500' : 'border-l-sky-500'}`}>
@@ -93,6 +97,14 @@ export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct }: Prof
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">Días operados totales</span>
           <span className="text-sm font-medium text-muted-foreground">{totalDays}</span>
+        </div>
+
+        <div className="border-t border-border/30 pt-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Próximo retiro estimado</span>
+            <span className="text-sm font-bold text-violet-400">{nextWithdrawalEstimate.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })}</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Aplicando {withdrawalPct}% sobre el balance actual.</p>
         </div>
       </CardContent>
     </Card>

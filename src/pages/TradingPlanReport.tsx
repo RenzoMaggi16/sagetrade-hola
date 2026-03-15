@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import {
@@ -29,6 +30,7 @@ import {
     Cell
 } from 'recharts';
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // --- Interfaces ---
 interface Trade {
@@ -36,8 +38,10 @@ interface Trade {
     pnl_neto: number;
     riesgo: number | null;
     entry_time: string;
+    exit_time: string | null;
     is_outside_plan: boolean;
     setup_compliance: 'full' | 'partial' | 'none' | null;
+    entry_types?: string[] | null;
 }
 
 interface TradingPlan {
@@ -80,6 +84,7 @@ interface ReportStats {
         best_day_pnl: number;
         worst_day_pnl: number;
         total_pnl: number;
+        avg_trade_duration_minutes: number;
     };
     consistency: {
         max_streak_inside: number;
@@ -110,6 +115,12 @@ const TradingPlanReport = () => {
     const [stats, setStats] = useState<ReportStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [equityCurve, setEquityCurve] = useState<any[]>([]);
+    const [allTrades, setAllTrades] = useState<Trade[]>([]);
+    const [tradingPlan, setTradingPlan] = useState<TradingPlan | null>(null);
+    const [entryTypeFilter, setEntryTypeFilter] = useState<string | null>(null);
+    const [availableEntryTypes, setAvailableEntryTypes] = useState<string[]>([]);
+    const [payoutChartData, setPayoutChartData] = useState<{ date: string; amount: number }[]>([]);
+    const [avgPayout, setAvgPayout] = useState<number>(0);
 
     useEffect(() => {
         fetchReportData();
@@ -128,39 +139,81 @@ const TradingPlanReport = () => {
                 .eq('user_id', user.id)
                 .single();
 
-            const tradingPlan = plan as TradingPlan;
+            setTradingPlan(plan as TradingPlan);
 
             // 2. Fetch All Trades
             const { data: tradesData, error } = await supabase
                 .from('trades')
-                .select('id, pnl_neto, riesgo, entry_time, is_outside_plan, setup_compliance')
+                .select('id, pnl_neto, riesgo, entry_time, exit_time, is_outside_plan, setup_compliance, entry_types')
                 .eq('user_id', user.id)
                 .order('entry_time', { ascending: true });
 
             if (error) throw error;
 
             const trades = (tradesData || []) as unknown as Trade[];
+            setAllTrades(trades);
+            const typesSet = new Set<string>();
+            trades.forEach(t => (t.entry_types || []).forEach(type => typesSet.add(type)));
+            setAvailableEntryTypes(Array.from(typesSet));
 
-            // 3. Calculate Stats
-            const calculatedStats = calculateStats(trades, tradingPlan);
-            setStats(calculatedStats);
+            // 3. Fetch Payouts
+            const { data: payoutsData } = await supabase
+                .from('payouts')
+                .select('id, payout_date, amount')
+                .eq('user_id', user.id)
+                .order('payout_date', { ascending: true });
 
-            // 4. Calculate Equity Curve
-            let runningBalance = 0;
-            const curve = trades.map(t => {
-                runningBalance += Number(t.pnl_neto);
-                return {
-                    date: t.entry_time ? format(new Date(t.entry_time), 'dd/MM') : '',
-                    balance: runningBalance
-                };
-            });
-            setEquityCurve(curve);
+            const payouts = (payoutsData || []) as { id: string; payout_date: string; amount: number }[];
+            const chart = payouts.map(p => ({
+                date: p.payout_date ? format(new Date(p.payout_date), 'dd/MM') : '',
+                amount: Number(p.amount) || 0
+            }));
+            setPayoutChartData(chart);
+            const avg = payouts.length > 0 ? payouts.reduce((s, p) => s + Number(p.amount || 0), 0) / payouts.length : 0;
+            setAvgPayout(avg);
 
         } catch (err) {
             console.error("Error fetching report data:", err);
         } finally {
             setLoading(false);
         }
+    };
+
+    useEffect(() => {
+        const tradesForStats = entryTypeFilter
+            ? allTrades.filter(t => (t.entry_types || []).includes(entryTypeFilter))
+            : allTrades;
+        if (tradesForStats.length === 0) {
+            setStats({
+                volume: { total_trades: 0, wins: 0, losses: 0, breakeven: 0 },
+                discipline: { inside_plan_count: 0, outside_plan_count: 0, inside_plan_pct: 0, days_respecting_plan: 0, days_breaking_plan: 0 },
+                risk: { avg_rr: 0, avg_risk: 0, risk_breaches: 0 },
+                psychology: { full_compliance_count: 0, partial_compliance_count: 0, none_compliance_count: 0, pnl_full: 0, pnl_partial: 0, pnl_none: 0 },
+                performance: { win_rate: 0, profit_factor: 0, max_drawdown: 0, best_day_pnl: 0, worst_day_pnl: 0, total_pnl: 0, avg_trade_duration_minutes: 0 },
+                consistency: { max_streak_inside: 0, max_streak_outside: 0 }
+            });
+            setEquityCurve([]);
+            return;
+        }
+        const calculatedStats = calculateStats(tradesForStats, tradingPlan);
+        setStats(calculatedStats);
+        let runningBalance = 0;
+        const curve = tradesForStats.map(t => {
+            runningBalance += Number(t.pnl_neto);
+            return {
+                date: t.entry_time ? format(new Date(t.entry_time), 'dd/MM') : '',
+                balance: runningBalance
+            };
+        });
+        setEquityCurve(curve);
+    }, [allTrades, tradingPlan, entryTypeFilter]);
+
+    const formatDuration = (minutes: number) => {
+        const m = Math.round(minutes);
+        const h = Math.floor(m / 60);
+        const rem = m % 60;
+        if (h > 0) return `${h}h ${rem}m`;
+        return `${rem}m`;
     };
 
     const calculateStats = (trades: Trade[], plan: TradingPlan | null): ReportStats => {
@@ -171,7 +224,7 @@ const TradingPlanReport = () => {
                 discipline: { inside_plan_count: 0, outside_plan_count: 0, inside_plan_pct: 0, days_respecting_plan: 0, days_breaking_plan: 0 },
                 risk: { avg_rr: 0, avg_risk: 0, risk_breaches: 0 },
                 psychology: { full_compliance_count: 0, partial_compliance_count: 0, none_compliance_count: 0, pnl_full: 0, pnl_partial: 0, pnl_none: 0 },
-                performance: { win_rate: 0, profit_factor: 0, max_drawdown: 0, best_day_pnl: 0, worst_day_pnl: 0, total_pnl: 0 },
+                performance: { win_rate: 0, profit_factor: 0, max_drawdown: 0, best_day_pnl: 0, worst_day_pnl: 0, total_pnl: 0, avg_trade_duration_minutes: 0 },
                 consistency: { max_streak_inside: 0, max_streak_outside: 0 }
             };
         }
@@ -218,8 +271,10 @@ const TradingPlanReport = () => {
             if (risk > 0) {
                 totalRisk += risk;
                 riskCount++;
-                totalRR += (pnl / risk);
-                rrCount++;
+                if (pnl > 0) {
+                    totalRR += (pnl / risk);
+                    rrCount++;
+                }
 
                 if (plan?.risk_per_trade && risk > plan.risk_per_trade) { // Assuming risk_per_trade is amount, need to check if it's % or amt logic. Using simple amt for now if defined.
                     // If plan uses %, we can't easily check without account balance history. 
@@ -273,6 +328,20 @@ const TradingPlanReport = () => {
         if (bestDay === -Infinity) bestDay = 0;
         if (worstDay === Infinity) worstDay = 0;
 
+        let durationTotal = 0;
+        let durationCount = 0;
+        trades.forEach(t => {
+            if (t.entry_time && t.exit_time) {
+                const start = new Date(t.entry_time).getTime();
+                const end = new Date(t.exit_time).getTime();
+                if (isFinite(start) && isFinite(end) && end > start) {
+                    durationTotal += (end - start) / 60000;
+                    durationCount++;
+                }
+            }
+        });
+        const avgDurationMinutes = durationCount > 0 ? durationTotal / durationCount : 0;
+
 
         // --- Consistency (Streaks) ---
         let maxStreakInside = 0;
@@ -308,7 +377,7 @@ const TradingPlanReport = () => {
             },
             performance: {
                 win_rate: winRate, profit_factor: profitFactor, max_drawdown: maxDrawdown,
-                best_day_pnl: bestDay, worst_day_pnl: worstDay, total_pnl: totalPnL
+                best_day_pnl: bestDay, worst_day_pnl: worstDay, total_pnl: totalPnL, avg_trade_duration_minutes: avgDurationMinutes
             },
             consistency: { max_streak_inside: maxStreakInside, max_streak_outside: maxStreakOutside }
         };
@@ -337,6 +406,23 @@ const TradingPlanReport = () => {
             <main className="container mx-auto px-4 py-8 max-w-7xl">
                 <h1 className="text-3xl font-bold mb-2">Reporte del Plan de Trading</h1>
                 <p className="text-muted-foreground mb-8">Análisis detallado de tu ejecución y disciplina.</p>
+                <div className="mb-6 flex flex-wrap items-center gap-3">
+                    <div className="w-[220px]">
+                        <Select value={entryTypeFilter ?? ""} onValueChange={(v) => setEntryTypeFilter(v || null)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tipo de entrada" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableEntryTypes.map((type) => (
+                                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button variant="outline" onClick={() => setEntryTypeFilter(null)} disabled={!entryTypeFilter}>
+                        Quitar filtro
+                    </Button>
+                </div>
 
                 {/* 1. Disciplina */}
                 <div className="mb-8">
@@ -393,11 +479,12 @@ const TradingPlanReport = () => {
                         <StatCard title="Drawdown Máximo" value={`$${stats.performance.max_drawdown.toFixed(2)}`} valueColor="text-red-500" icon={TrendingDown} />
                         <StatCard title="PNL Total" value={`$${stats.performance.total_pnl.toFixed(2)}`} valueColor={stats.performance.total_pnl >= 0 ? "text-[var(--profit-color)]" : "text-[var(--loss-color)]"} />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <StatCard title="RR Promedio" value={`1:${stats.performance.win_rate > 0 ? stats.risk.avg_rr.toFixed(2) : '0'}`} icon={Activity} />
                         <StatCard title="Riesgo Promedio" value={`$${stats.risk.avg_risk.toFixed(2)}`} icon={ShieldAlert} />
                         <StatCard title="Mejor Día" value={`$${stats.performance.best_day_pnl.toFixed(2)}`} valueColor="text-[var(--profit-color)]" />
                         <StatCard title="Peor Día" value={`$${stats.performance.worst_day_pnl.toFixed(2)}`} valueColor="text-[var(--loss-color)]" />
+                        <StatCard title="Duración Promedio" value={formatDuration(stats.performance.avg_trade_duration_minutes)} icon={Activity} />
                     </div>
                 </div>
 
@@ -423,6 +510,40 @@ const TradingPlanReport = () => {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* 4. Retiros */}
+                <div className="mb-8">
+                    <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                        Retiros
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Histórico de Retiros</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[260px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={payoutChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                            <XAxis dataKey="date" />
+                                            <YAxis />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#1e1e1e', border: 'none' }}
+                                                formatter={(value: number) => [`$${value.toFixed(2)}`, 'Retiro']}
+                                            />
+                                            <Bar dataKey="amount" fill="#7c3aed" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <StatCard
+                            title="Promedio de Retiro"
+                            value={`$${avgPayout.toFixed(2)}`}
+                        />
+                    </div>
+                </div>
 
                 {/* 4. Psicología y Setup Compliance */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
