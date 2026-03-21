@@ -217,6 +217,7 @@ All colors MUST be HSL.
 
   html {
     overflow-x: hidden;
+    scroll-behavior: smooth;
   }
 
   body {
