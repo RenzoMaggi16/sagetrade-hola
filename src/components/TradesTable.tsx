@@ -16,10 +16,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { Search, Trash2, Eye, Pencil, Banknote } from "lucide-react";
+import { Search, Trash2, Eye, Pencil, Banknote, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { TradeForm } from "@/components/TradeForm";
+import { TradeImporter } from "@/components/trades/TradeImporter";
+import { TradeExporter } from "@/components/trades/TradeExporter";
 
 interface TradeRow {
   id: string;
@@ -48,6 +50,7 @@ export const TradesTable = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [editingTrade, setEditingTrade] = useState<any | null>(null);
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -239,7 +242,15 @@ export const TradesTable = () => {
     <>
       <Card className="border-border">
         <CardHeader>
-          <CardTitle>Mis Trades</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <CardTitle>Mis Trades</CardTitle>
+            <div className="flex items-center gap-2">
+               <Button variant="outline" onClick={() => setIsImporterOpen(true)}>
+                 <Upload className="mr-2 h-4 w-4" /> Importar CSV
+               </Button>
+               <TradeExporter />
+            </div>
+          </div>
           <div className="grid gap-4 md:grid-cols-3 pt-4">
             <div className="space-y-2">
               <Label htmlFor="symbol-filter">Filtrar por Par</Label>
@@ -402,6 +413,15 @@ export const TradesTable = () => {
           />
         </DialogContent>
       </Dialog>
+      
+      <TradeImporter 
+        isOpen={isImporterOpen} 
+        onOpenChange={setIsImporterOpen} 
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["trades"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+        }} 
+      />
     </>
   );
 };

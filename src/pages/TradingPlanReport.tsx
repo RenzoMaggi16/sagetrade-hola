@@ -150,7 +150,7 @@ const TradingPlanReport = () => {
 
             if (error) throw error;
 
-            const trades = (tradesData || []) as unknown as Trade[];
+            const trades = ((tradesData || []) as unknown as Trade[]).filter(t => t.entry_time);
             setAllTrades(trades);
             const typesSet = new Set<string>();
             trades.forEach(t => (t.entry_types || []).forEach(type => typesSet.add(type)));
