@@ -18,35 +18,38 @@ import Settings from "./pages/Settings";
 import TradesPage from "./pages/TradesPage";
 import { ThemeProvider } from "./context/ThemeProvider";
 import { ColorProvider } from "./context/ColorProvider";
+import { SmoothScrollProvider } from "./components/SmoothScrollProvider";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <ThemeProvider defaultTheme="dark">
     <ColorProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/trade/:id" element={<TradeDetail />} />
-              <Route path="/trades" element={<TradesPage />} />
-              <Route path="/analisis" element={<AnalisisIA />} />
-              <Route path="/mentor" element={<MentorIA />} />
-              <Route path="/reglas" element={<MisReglas />} />
-              <Route path="/estrategias" element={<ManageStrategies />} />
+      <SmoothScrollProvider>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/trade/:id" element={<TradeDetail />} />
+                <Route path="/trades" element={<TradesPage />} />
+                <Route path="/analisis" element={<AnalisisIA />} />
+                <Route path="/mentor" element={<MentorIA />} />
+                <Route path="/reglas" element={<MisReglas />} />
+                <Route path="/estrategias" element={<ManageStrategies />} />
 
-              <Route path="/cuentas" element={<ManageAccounts />} />
-              <Route path="/reportes" element={<TradingPlanReport />} />
-              <Route path="/configuracion" element={<Settings />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </QueryClientProvider>
+                <Route path="/cuentas" element={<ManageAccounts />} />
+                <Route path="/reportes" element={<TradingPlanReport />} />
+                <Route path="/configuracion" element={<Settings />} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </SmoothScrollProvider>
     </ColorProvider>
   </ThemeProvider>
 );
