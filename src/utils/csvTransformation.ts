@@ -19,6 +19,9 @@ export const APP_FIELDS = [
   { id: 'emocion', label: 'Emotion', type: 'string', required: false },
   { id: 'entry_types', label: 'Entry Types (Comma separated)', type: 'array', required: false },
   { id: 'is_outside_plan', label: 'Outside Plan?', type: 'boolean', required: false },
+  { id: 'image_url_m1', label: 'URL Imagen M1', type: 'string', required: false },
+  { id: 'image_url_m5', label: 'URL Imagen M5', type: 'string', required: false },
+  { id: 'image_url_m15', label: 'URL Imagen M15', type: 'string', required: false },
 ];
 
 /**
