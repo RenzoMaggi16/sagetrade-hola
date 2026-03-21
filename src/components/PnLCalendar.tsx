@@ -32,9 +32,10 @@ interface PnLCalendarProps {
   displayMode?: CalendarDisplayMode;
   initialCapital?: number;
   onDayClick?: (date: Date, tradeIds: string[]) => void;
+  onMonthChange?: (date: Date) => void;
 }
 
-export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars', initialCapital = 0, onDayClick }: PnLCalendarProps) => {
+export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars', initialCapital = 0, onDayClick, onMonthChange }: PnLCalendarProps) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [dailyPnL, setDailyPnL] = useState<DayPnL[]>([]);
 
@@ -79,12 +80,14 @@ export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars'
     const prevMonth = new Date(currentMonth);
     prevMonth.setMonth(prevMonth.getMonth() - 1);
     setCurrentMonth(prevMonth);
+    onMonthChange?.(prevMonth);
   };
 
   const goToNextMonth = () => {
     const nextMonth = new Date(currentMonth);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setCurrentMonth(nextMonth);
+    onMonthChange?.(nextMonth);
   };
 
   const hasTrade = (day: Date) => {
@@ -121,7 +124,10 @@ export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars'
         <Calendar
           mode="single"
           month={currentMonth}
-          onMonthChange={setCurrentMonth}
+          onMonthChange={(m) => {
+            setCurrentMonth(m);
+            onMonthChange?.(m);
+          }}
           className="w-full"
           classNames={{
             head_row: "flex w-full",
