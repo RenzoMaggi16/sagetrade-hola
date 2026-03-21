@@ -42,6 +42,8 @@ const emocionOptions = [
   { value: "Miedo", label: "Miedo" },
   { value: "Frustración", label: "Frustración" },
   { value: "Venganza", label: "Venganza" },
+  { value: "FOMO", label: "FOMO" },
+  { value: "Exceso de confianza", label: "Exceso de confianza" },
 ];
 
 // Opciones de Tipo de Entrada

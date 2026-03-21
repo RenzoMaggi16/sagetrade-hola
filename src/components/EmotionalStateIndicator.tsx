@@ -17,6 +17,8 @@ const emotionStyles: Record<string, { emoji: string; bgColor: string; glowShadow
   Miedo: { emoji: "😱", bgColor: "bg-violet-600", glowShadow: "shadow-violet-500/60", textColor: "text-white", hexColor: "#8b5cf6" },
   Frustración: { emoji: "😡", bgColor: "bg-red-600", glowShadow: "shadow-red-500/60", textColor: "text-white", hexColor: "#dc2626" },
   Venganza: { emoji: "😈", bgColor: "bg-red-700", glowShadow: "shadow-red-600/60", textColor: "text-white", hexColor: "#b91c1c" },
+  "FOMO": { emoji: "🏃‍♂️", bgColor: "bg-pink-500", glowShadow: "shadow-pink-400/60", textColor: "text-white", hexColor: "#ec4899" },
+  "Exceso de confianza": { emoji: "🦸‍♂️", bgColor: "bg-blue-600", glowShadow: "shadow-blue-500/60", textColor: "text-white", hexColor: "#2563eb" },
   Default: { emoji: "❓", bgColor: "bg-zinc-600", glowShadow: "shadow-zinc-500/50", textColor: "text-white", hexColor: "#52525b" },
 };
 
