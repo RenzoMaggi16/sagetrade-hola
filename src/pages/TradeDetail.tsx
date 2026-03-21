@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import { ArrowLeft, Pencil, CheckCircle, AlertTriangle, XCircle, Ban, Star } from "lucide-react";
+import { ArrowLeft, Pencil, CheckCircle, AlertTriangle, XCircle, Ban, Star, Search, ZoomIn, ZoomOut } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,17 +64,22 @@ const NotesBox = ({ title, notes }: { title: string; notes: string | null }) => 
 
 // Componente auxiliar para las miniaturas
 const ImageThumbnail = ({ src, label, onImageClick }: { src: string, label: string, onImageClick: (src: string) => void }) => (
-  <div className="space-y-2">
+  <div className="space-y-2 group">
     <Label className="text-sm font-medium">{label}</Label>
     <button
       onClick={() => onImageClick(src)}
-      className="block w-full h-48 rounded-md overflow-hidden border border-neutral-700 hover:opacity-80 transition-opacity bg-neutral-900"
+      className="relative block w-full h-48 rounded-md overflow-hidden border border-neutral-700 bg-neutral-900 overflow-hidden"
     >
       <img
         src={src}
         alt={`Gráfico ${label}`}
-        className="w-full h-full object-cover"
+        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
       />
+      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="bg-primary/20 p-2 rounded-full border border-primary/40 backdrop-blur-sm">
+          <Search className="h-6 w-6 text-primary" />
+        </div>
+      </div>
     </button>
   </div>
 );
@@ -86,6 +91,7 @@ const TradeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const fetchTradeDetails = async () => {
     if (!id) {
@@ -339,13 +345,18 @@ const TradeDetail = () => {
                   <div className="mb-3">
                     <button
                       onClick={() => setSelectedImageUrl(trade.trade_of_day_image!)}
-                      className="block w-full max-w-lg h-64 rounded-md overflow-hidden border border-yellow-500/30 hover:opacity-80 transition-opacity bg-neutral-900"
+                      className="relative block w-full max-w-lg h-64 rounded-md overflow-hidden border border-yellow-500/30 bg-neutral-900 group"
                     >
                       <img
                         src={trade.trade_of_day_image}
                         alt="Trade del Día"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <div className="bg-yellow-500/20 p-2 rounded-full border border-yellow-500/40 backdrop-blur-sm">
+                          <Search className="h-6 w-6 text-yellow-400" />
+                        </div>
+                      </div>
                     </button>
                   </div>
                 )}
@@ -409,13 +420,35 @@ const TradeDetail = () => {
         </Card>
 
         {/* --- Componente Modal (Lightbox) --- */}
-        <Dialog open={!!selectedImageUrl} onOpenChange={() => setSelectedImageUrl(null)}>
-          <DialogContent className="max-w-5xl h-[90vh] bg-transparent border-0 shadow-none flex items-center justify-center p-0">
-            <img
-              src={selectedImageUrl || ''}
-              alt="Vista detallada del gráfico"
-              className="max-w-full max-h-full object-contain"
-            />
+        <Dialog open={!!selectedImageUrl} onOpenChange={(open) => {
+          if (!open) {
+            setSelectedImageUrl(null);
+            setIsZoomed(false);
+          }
+        }}>
+          <DialogContent className="max-w-[95vw] md:max-w-6xl h-[90vh] bg-black/95 border-0 shadow-2xl flex items-center justify-center p-0 overflow-hidden ring-1 ring-white/10">
+            <div className={`relative w-full h-full flex items-center justify-center ${isZoomed ? 'cursor-zoom-out overflow-auto' : 'cursor-zoom-in'}`}>
+              <img
+                src={selectedImageUrl || ''}
+                alt="Vista detallada del gráfico"
+                onClick={() => setIsZoomed(!isZoomed)}
+                className={`transition-all duration-300 ${
+                  isZoomed 
+                    ? 'max-w-none min-w-full scale-150' 
+                    : 'max-w-full max-h-full object-contain'
+                }`}
+              />
+              <div className="absolute top-4 right-16 z-50">
+                <Button 
+                  size="icon" 
+                  variant="secondary" 
+                  className="rounded-full bg-black/50 border border-white/20 text-white hover:bg-black/70 backdrop-blur-md"
+                  onClick={() => setIsZoomed(!isZoomed)}
+                >
+                  {isZoomed ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 

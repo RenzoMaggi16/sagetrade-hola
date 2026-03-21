@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Eye, ArrowLeft, TrendingUp, TrendingDown, Minus, Clock, Target, Star, AlertTriangle, CheckCircle, Ban, XCircle, ImageIcon } from "lucide-react";
+import { Eye, ArrowLeft, TrendingUp, TrendingDown, Minus, Clock, Target, Star, AlertTriangle, CheckCircle, Ban, XCircle, ImageIcon, Search, ZoomIn, ZoomOut } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 
@@ -47,6 +47,7 @@ export const DayTradesModal = ({ open, onOpenChange, date, accountTradeIds }: Da
   const [loading, setLoading] = useState(false);
   const [selectedTrade, setSelectedTrade] = useState<TradeFull | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   useEffect(() => {
     if (!open || !date || accountTradeIds.length === 0) {
@@ -235,28 +236,37 @@ export const DayTradesModal = ({ open, onOpenChange, date, accountTradeIds }: Da
                   {(trade as any).image_url_m1 && (
                     <button
                       onClick={() => setSelectedImageUrl((trade as any).image_url_m1)}
-                      className="relative rounded-md overflow-hidden border border-border hover:opacity-80 transition-opacity aspect-video bg-neutral-900"
+                      className="relative rounded-md overflow-hidden border border-border bg-neutral-900 aspect-video group"
                     >
-                      <img src={(trade as any).image_url_m1} alt="M1" className="w-full h-full object-cover" />
-                      <span className="absolute bottom-0.5 left-1 text-[9px] font-bold bg-black/70 px-1.5 py-0.5 rounded text-white">M1</span>
+                      <img src={(trade as any).image_url_m1} alt="M1" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <Search className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="absolute bottom-1 left-1 text-[8px] font-bold bg-black/70 px-1 py-0.5 rounded text-white z-10">M1</span>
                     </button>
                   )}
                   {(trade as any).image_url_m5 && (
                     <button
                       onClick={() => setSelectedImageUrl((trade as any).image_url_m5)}
-                      className="relative rounded-md overflow-hidden border border-border hover:opacity-80 transition-opacity aspect-video bg-neutral-900"
+                      className="relative rounded-md overflow-hidden border border-border bg-neutral-900 aspect-video group"
                     >
-                      <img src={(trade as any).image_url_m5} alt="M5" className="w-full h-full object-cover" />
-                      <span className="absolute bottom-0.5 left-1 text-[9px] font-bold bg-black/70 px-1.5 py-0.5 rounded text-white">M5</span>
+                      <img src={(trade as any).image_url_m5} alt="M5" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <Search className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="absolute bottom-1 left-1 text-[8px] font-bold bg-black/70 px-1 py-0.5 rounded text-white z-10">M5</span>
                     </button>
                   )}
                   {(trade as any).image_url_m15 && (
                     <button
                       onClick={() => setSelectedImageUrl((trade as any).image_url_m15)}
-                      className="relative rounded-md overflow-hidden border border-border hover:opacity-80 transition-opacity aspect-video bg-neutral-900"
+                      className="relative rounded-md overflow-hidden border border-border bg-neutral-900 aspect-video group"
                     >
-                      <img src={(trade as any).image_url_m15} alt="M15" className="w-full h-full object-cover" />
-                      <span className="absolute bottom-0.5 left-1 text-[9px] font-bold bg-black/70 px-1.5 py-0.5 rounded text-white">M15</span>
+                      <img src={(trade as any).image_url_m15} alt="M15" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <Search className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="absolute bottom-1 left-1 text-[8px] font-bold bg-black/70 px-1 py-0.5 rounded text-white z-10">M15</span>
                     </button>
                   )}
                 </div>
@@ -273,9 +283,12 @@ export const DayTradesModal = ({ open, onOpenChange, date, accountTradeIds }: Da
                 {(trade as any).trade_of_day_image && (
                   <button
                     onClick={() => setSelectedImageUrl((trade as any).trade_of_day_image)}
-                    className="block w-full max-w-md h-40 rounded-md overflow-hidden border border-yellow-500/30 hover:opacity-80 transition-opacity bg-neutral-900 mb-2"
+                    className="relative block w-full max-w-md h-40 rounded-md overflow-hidden border border-yellow-500/30 bg-neutral-900 mb-2 group"
                   >
-                    <img src={(trade as any).trade_of_day_image} alt="Trade del Día" className="w-full h-full object-cover" />
+                    <img src={(trade as any).trade_of_day_image} alt="Trade del Día" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <Search className="h-5 w-5 text-yellow-400" />
+                    </div>
                   </button>
                 )}
                 {(trade as any).trade_of_day_notes && (
@@ -287,13 +300,35 @@ export const DayTradesModal = ({ open, onOpenChange, date, accountTradeIds }: Da
 
           {/* Image Lightbox */}
           {selectedImageUrl && (
-            <Dialog open={!!selectedImageUrl} onOpenChange={() => setSelectedImageUrl(null)}>
-              <DialogContent className="max-w-5xl h-[90vh] bg-transparent border-0 shadow-none flex items-center justify-center p-0">
-                <img
-                  src={selectedImageUrl}
-                  alt="Vista detallada"
-                  className="max-w-full max-h-full object-contain"
-                />
+            <Dialog open={!!selectedImageUrl} onOpenChange={(open) => {
+              if (!open) {
+                setSelectedImageUrl(null);
+                setIsZoomed(false);
+              }
+            }}>
+              <DialogContent className="max-w-[95vw] md:max-w-5xl h-[90vh] bg-black/95 border-0 shadow-2xl flex items-center justify-center p-0 overflow-hidden ring-1 ring-white/10">
+                <div className={`relative w-full h-full flex items-center justify-center ${isZoomed ? 'cursor-zoom-out overflow-auto' : 'cursor-zoom-in'}`}>
+                  <img
+                    src={selectedImageUrl}
+                    alt="Vista detallada"
+                    onClick={() => setIsZoomed(!isZoomed)}
+                    className={`transition-all duration-300 ${
+                      isZoomed 
+                        ? 'max-w-none min-w-full scale-150' 
+                        : 'max-w-full max-h-full object-contain'
+                    }`}
+                  />
+                  <div className="absolute top-4 right-16 z-50">
+                    <Button 
+                      size="icon" 
+                      variant="secondary" 
+                      className="rounded-full bg-black/50 border border-white/20 text-white hover:bg-black/70 backdrop-blur-md"
+                      onClick={() => setIsZoomed(!isZoomed)}
+                    >
+                      {isZoomed ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+                    </Button>
+                  </div>
+                </div>
               </DialogContent>
             </Dialog>
           )}
