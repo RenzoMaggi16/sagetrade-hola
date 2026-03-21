@@ -530,7 +530,7 @@ const ManageAccounts = () => {
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="trailing" id="trailing" />
-                    <Label htmlFor="trailing">Trailing (Topstep)</Label>
+                    <Label htmlFor="trailing">Trailing</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="fixed" id="fixed" />
@@ -588,7 +588,7 @@ const ManageAccounts = () => {
                   {formData.has_consistency && (
                     <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
                       <div className="grid gap-1">
-                        <Label htmlFor="consistency_days" className="text-xs">Días profit consecutivos</Label>
+                        <Label htmlFor="consistency_days" className="text-xs">Días profit</Label>
                         <Input
                           id="consistency_days"
                           type="number"
