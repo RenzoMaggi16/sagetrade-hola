@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CardContent } from "@/components/ui/card";
 import { PnLCalendar } from "./PnLCalendar";
+import { CalendarContainer } from "./calendar/CalendarContainer";
 import EquityChart from "./EquityChart";
 import { useMemo, useState, useEffect } from "react";
 import { WinRateDonutChart } from "@/components/charts/WinRateDonutChart";
@@ -78,6 +79,9 @@ export const Dashboard = () => {
   const [dayModalDate, setDayModalDate] = useState<Date | null>(null);
   const [dayModalTradeIds, setDayModalTradeIds] = useState<string[]>([]);
 
+  // Risk panel account filter (persists in "All Accounts" mode)
+  const [riskAccountId, setRiskAccountId] = useState<string | null>(null);
+
   // Trading Plan hook
   const { plan, isLoading: isLoadingPlan, savePlan, isSaving } = useTradingPlan();
 
@@ -111,6 +115,17 @@ export const Dashboard = () => {
       }
     }
   }, [accounts, selectedAccountId]);
+
+  // Sync riskAccountId: follow global selection, or default to first account in 'all' mode
+  useEffect(() => {
+    if (selectedAccountId && selectedAccountId !== 'all') {
+      setRiskAccountId(selectedAccountId);
+    } else if (selectedAccountId === 'all' && !riskAccountId && accounts.length > 0) {
+      setRiskAccountId(accounts[0].id);
+    } else if (riskAccountId && accounts.length > 0 && !accounts.some(a => a.id === riskAccountId)) {
+      setRiskAccountId(accounts[0].id);
+    }
+  }, [selectedAccountId, accounts]);
 
   // 3. Fetch Trades (Filtered by selectedAccountId)
   const { data: allTrades = [] } = useQuery({
@@ -490,6 +505,38 @@ export const Dashboard = () => {
     trades.map(t => ({ id: t.id, pnl_neto: t.pnl_neto, entry_time: t.entry_time, is_outside_plan: t.is_outside_plan }))
   );
 
+  // Risk panel per-account balance/HWM — computed for riskAccountId only
+  const riskData = useMemo(() => {
+    if (!riskAccountId || accounts.length === 0) return null;
+    const acc = accounts.find(a => a.id === riskAccountId);
+    if (!acc) return null;
+
+    const accInitial = acc.initial_capital || 0;
+    const acTradesSorted = [...allTrades].filter(t => t.account_id === riskAccountId).sort((a, b) => new Date(a.entry_time).getTime() - new Date(b.entry_time).getTime());
+    const acPayouts = payouts.filter(p => p.account_id === riskAccountId).reduce((s, p) => s + Number(p.amount), 0);
+
+    // For passed accounts, only count trades after pass
+    const passedAt = acc.evaluation_passed_at;
+    const effectiveTrades = passedAt
+      ? acTradesSorted.filter(t => new Date(t.entry_time).getTime() > new Date(passedAt).getTime())
+      : acTradesSorted;
+
+    const effectivePnL = effectiveTrades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
+    const riskBalance = passedAt
+      ? accInitial + effectivePnL
+      : accInitial + acTradesSorted.reduce((sum, t) => sum + Number(t.pnl_neto), 0) - acPayouts;
+
+    // HWM
+    let hwm = accInitial;
+    let running = accInitial;
+    for (const trade of effectiveTrades) {
+      running += Number(trade.pnl_neto);
+      if (running > hwm) hwm = running;
+    }
+
+    return { account: acc, balance: riskBalance, hwm };
+  }, [riskAccountId, accounts, allTrades, payouts]);
+
   // If no account is selected (loading or empty), show friendly state
   if (!selectedAccountId && !isLoadingAccounts) {
     if (accounts.length === 0) return <div className="p-4">No accounts found. Create one to get started.</div>;
@@ -516,7 +563,7 @@ export const Dashboard = () => {
           {/* KPI Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {/* Winrate Card */}
-            <StatCard title="Winrate" value={`${metrics?.winRate.toFixed(2) || '0.00'}%`}>
+            <StatCard title="Winrate" value={`${metrics?.winRate.toFixed(2) || '0.00'}%`} animationDelay={0}>
               <div className="h-[60px] flex items-center justify-center mt-2">
                 <WinRateDonutChart
                   wins={trades.filter(t => t.pnl_neto > 0).length}
@@ -528,7 +575,7 @@ export const Dashboard = () => {
             </StatCard>
 
             {/* Ratio Card */}
-            <StatCard title="Promedio de victorias / Promedio de derrotas" value={metrics?.ratio.toFixed(2) || '0.00'}>
+            <StatCard title="Promedio de victorias / Promedio de derrotas" value={metrics?.ratio.toFixed(2) || '0.00'} animationDelay={0.075}>
               <WinLossRatioBar
                 winValue={metrics?.avgWin || 0}
                 lossValue={metrics?.avgLoss || 0}
@@ -538,7 +585,7 @@ export const Dashboard = () => {
             </StatCard>
 
             {/* Trade Count Card */}
-            <StatCard title="Número total de operaciones" value={metrics?.totalTrades || 0}>
+            <StatCard title="Número total de operaciones" value={metrics?.totalTrades || 0} animationDelay={0.15}>
               <div className="mt-2 text-xs text-muted-foreground flex justify-between mb-1">
                 <span>{dateRange ? 'Inicio' : ''}</span>
                 <span>{dateRange ? 'Rango' : ''}</span>
@@ -548,7 +595,7 @@ export const Dashboard = () => {
             </StatCard>
 
             {/* Winstreak Card */}
-            <StatCard title="Racha">
+            <StatCard title="Racha" animationDelay={0.225}>
               <StreakStats
                 currentStreak={metrics?.currentStreakCount || 0}
                 bestStreak={metrics?.bestStreak || 0}
@@ -562,20 +609,24 @@ export const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {/* Left Column */}
             <div className="md:col-span-1 flex flex-col gap-4 min-w-0">
-              {/* Risk Account Card */}
-              {selectedAccountId && accounts.find(a => a.id === selectedAccountId) && (
+              {/* Risk Account Card — always visible */}
+              {riskData && riskData.account && (
                 <RiskAccountCard
-                  account={accounts.find(a => a.id === selectedAccountId)!}
-                  currentBalance={currentBalance}
-                  highWaterMark={highWaterMark}
+                  account={riskData.account}
+                  currentBalance={riskData.balance}
+                  highWaterMark={riskData.hwm}
                   profitTarget={
                     (() => {
-                      const acc = accounts.find(a => a.id === selectedAccountId)!;
+                      const acc = riskData.account;
                       return acc.account_type === 'evaluation'
                         ? (acc.funding_target_1 ?? undefined)
                         : (acc.profit_target ?? undefined);
                     })()
                   }
+                  accounts={accounts}
+                  riskAccountId={riskAccountId}
+                  onRiskAccountChange={setRiskAccountId}
+                  showAccountFilter={selectedAccountId === 'all'}
                 />
               )}
 
@@ -658,7 +709,7 @@ export const Dashboard = () => {
             <div className="md:col-span-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-3 space-y-4">
-                  <PnLCalendar
+                  <CalendarContainer
                     trades={trades}
                     payouts={payouts}
                     displayMode={displayMode}

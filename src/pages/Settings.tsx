@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Navbar } from '@/components/Navbar';
+import { BackToDashboard } from '@/components/BackToDashboard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +41,7 @@ const Settings = () => {
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 overflow-x-hidden">
       <Navbar />
       <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
+        <BackToDashboard />
         <div className="flex items-center space-x-3 mb-6 sm:mb-8">
           <SettingsIcon className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
           <h1 className="text-2xl sm:text-3xl font-bold">Configuración</h1>

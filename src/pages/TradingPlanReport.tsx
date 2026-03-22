@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Navbar } from "@/components/Navbar";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -404,6 +405,7 @@ const TradingPlanReport = () => {
         <div className="min-h-screen bg-background">
             <Navbar />
             <main className="container mx-auto px-4 py-8 max-w-7xl">
+                <BackToDashboard />
                 <h1 className="text-3xl font-bold mb-2">Reporte del Plan de Trading</h1>
                 <p className="text-muted-foreground mb-8">Análisis detallado de tu ejecución y disciplina.</p>
                 <div className="mb-6 flex flex-wrap items-center gap-3">

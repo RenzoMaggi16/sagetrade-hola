@@ -33,11 +33,20 @@ interface PnLCalendarProps {
   initialCapital?: number;
   onDayClick?: (date: Date, tradeIds: string[]) => void;
   onMonthChange?: (date: Date) => void;
+  controlledMonth?: Date;
+  embedded?: boolean;
 }
 
-export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars', initialCapital = 0, onDayClick, onMonthChange }: PnLCalendarProps) => {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars', initialCapital = 0, onDayClick, onMonthChange, controlledMonth, embedded = false }: PnLCalendarProps) => {
+  const [currentMonth, setCurrentMonth] = useState(controlledMonth || new Date());
   const [dailyPnL, setDailyPnL] = useState<DayPnL[]>([]);
+
+  // Sync with controlled month from parent (CalendarContainer)
+  useEffect(() => {
+    if (controlledMonth) {
+      setCurrentMonth(controlledMonth);
+    }
+  }, [controlledMonth]);
 
   // Internal query removed in favor of passed props
 
@@ -95,32 +104,9 @@ export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars'
     return dayPnL && dayPnL.pnl !== 0;
   };
 
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-lg font-medium">
-          {format(currentMonth, "MMMM yyyy", { locale: es })}
-        </CardTitle>
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToPreviousMonth}
-            className="h-8 w-8"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToNextMonth}
-            className="h-8 w-8"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+  const calendarContent = (
+      <div className={embedded ? '' : undefined}>
+        <CardContent>
         <Calendar
           mode="single"
           month={currentMonth}
@@ -128,8 +114,11 @@ export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars'
             setCurrentMonth(m);
             onMonthChange?.(m);
           }}
+          disableNavigation={embedded}
           className="w-full"
           classNames={{
+            caption: embedded ? "hidden" : "flex justify-center pt-1 relative items-center",
+            nav: embedded ? "hidden" : undefined,
             head_row: "flex w-full",
             head_cell: "text-primary font-medium text-xs uppercase text-center flex-1",
             row: "flex w-full mt-2 gap-1", // Añadido gap-1 para aumentar ligeramente la separación
@@ -215,7 +204,40 @@ export const PnLCalendar = ({ trades = [], payouts = [], displayMode = 'dollars'
             }
           }}
         />
-      </CardContent>
+        </CardContent>
+      </div>
+  );
+
+  if (embedded) {
+    return calendarContent;
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-lg font-medium">
+          {format(currentMonth, "MMMM yyyy", { locale: es })}
+        </CardTitle>
+        <div className="flex space-x-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={goToPreviousMonth}
+            className="h-8 w-8"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={goToNextMonth}
+            className="h-8 w-8"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      {calendarContent}
     </Card>
   );
 };

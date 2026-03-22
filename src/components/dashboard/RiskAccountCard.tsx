@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, TrendingDown, ShieldCheck, ShieldAlert, Ban, Trophy, DollarSign, Ruler, Target, PartyPopper } from "lucide-react";
+import { AlertTriangle, TrendingDown, ShieldCheck, ShieldAlert, Ban, Trophy, DollarSign, Ruler, Target, PartyPopper, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,9 +38,89 @@ interface RiskAccountCardProps {
   currentBalance: number;
   highWaterMark?: number;
   profitTarget?: number;
+  // Account filter (for "All Accounts" mode)
+  accounts?: Account[];
+  riskAccountId?: string | null;
+  onRiskAccountChange?: (id: string) => void;
+  showAccountFilter?: boolean;
 }
 
-export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmProp, profitTarget }: RiskAccountCardProps) => {
+// ── Custom Glass Dropdown for Account Filter ──
+const RiskAccountFilter = ({
+  accounts,
+  selectedId,
+  onChange,
+}: {
+  accounts: Account[];
+  selectedId: string;
+  onChange: (id: string) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedAccount = accounts.find(a => a.id === selectedId);
+
+  // Close on click outside
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClick);
+    }
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isOpen]);
+
+  return (
+    <div className="relative mt-2" ref={dropdownRef}>
+      {/* Trigger */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="risk-filter-trigger"
+      >
+        <span className="truncate text-xs">
+          {selectedAccount?.account_name || 'Cuenta'}
+        </span>
+        <ChevronDown
+          className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Dropdown Panel */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className="risk-filter-dropdown"
+          >
+            {accounts.map(acc => (
+              <button
+                key={acc.id}
+                onClick={() => {
+                  onChange(acc.id);
+                  setIsOpen(false);
+                }}
+                className={`risk-filter-option ${acc.id === selectedId ? 'active' : ''}`}
+              >
+                <span className="text-[10px] opacity-50">
+                  {acc.account_type === 'live' ? '🏦' : '🧪'}
+                </span>
+                <span className="truncate">{acc.account_name}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmProp, profitTarget, accounts: accountsList, riskAccountId, onRiskAccountChange, showAccountFilter = false }: RiskAccountCardProps) => {
   const [showPassDialog, setShowPassDialog] = useState(false);
   const [wantsConsistency, setWantsConsistency] = useState(false);
   const [minProfitDays, setMinProfitDays] = useState(5);
@@ -207,6 +288,14 @@ export const RiskAccountCard = ({ account, currentBalance, highWaterMark: hwmPro
             {badgeText}
           </div>
         </div>
+        {/* Account filter dropdown — only in 'All Accounts' mode */}
+        {showAccountFilter && accountsList && accountsList.length > 0 && onRiskAccountChange && (
+          <RiskAccountFilter
+            accounts={accountsList}
+            selectedId={riskAccountId || ''}
+            onChange={onRiskAccountChange}
+          />
+        )}
       </CardHeader>
 
       {/* ── Content ── */}

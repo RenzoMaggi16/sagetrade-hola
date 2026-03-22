@@ -381,3 +381,317 @@ All colors MUST be HSL.
 .text-calendar-loss {
   color: var(--calendar-loss-text-color);
 }
+
+/* ─── Year View Calendar Styles ─────────────────────────── */
+
+/* View toggle container */
+.view-toggle-container {
+  display: flex;
+  background: hsla(var(--muted), 0.5);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid hsla(var(--border), 0.4);
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.view-toggle-btn:hover {
+  color: hsl(var(--foreground));
+  background: hsla(var(--accent), 0.5);
+}
+
+.view-toggle-btn.active {
+  background: hsla(var(--card), 0.9);
+  color: hsl(var(--foreground));
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    0 0 0 1px hsla(var(--border), 0.3);
+}
+
+/* Year View layout */
+.year-view-container {
+  padding: 8px;
+}
+
+.year-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 12px;
+}
+
+.year-view-title {
+  text-align: center;
+  flex: 1;
+}
+
+.year-view-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .year-view-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+/* Month card in Year View */
+.year-view-month-card {
+  background: hsla(var(--card), 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid hsla(var(--border), 0.4);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.year-view-month-card:hover {
+  border-color: hsla(var(--glow-color), 0.3);
+  box-shadow:
+    0 0 0 1px hsla(var(--glow-color), 0.1),
+    0 4px 20px -4px hsla(var(--glow-color), 0.15);
+}
+
+.month-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  text-transform: capitalize;
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+
+/* Mini calendar grid */
+.month-card-mini-grid {
+  width: 100%;
+}
+
+.mini-day-headers {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  margin-bottom: 3px;
+}
+
+.mini-day-header {
+  text-align: center;
+  font-size: 9px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  padding: 1px 0;
+}
+
+.mini-calendar-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mini-calendar-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.mini-day-cell {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsla(var(--muted), 0.3);
+  transition: background 0.15s ease;
+  position: relative;
+}
+
+.mini-day-cell.empty {
+  background: transparent;
+}
+
+.mini-day-number {
+  font-size: 8px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  line-height: 1;
+}
+
+.mini-day-cell.profit {
+  background: color-mix(in srgb, var(--profit-color) 25%, transparent);
+}
+
+.mini-day-cell.profit .mini-day-number {
+  color: var(--profit-color);
+  font-weight: 600;
+}
+
+.mini-day-cell.loss {
+  background: color-mix(in srgb, var(--loss-color) 25%, transparent);
+}
+
+.mini-day-cell.loss .mini-day-number {
+  color: var(--loss-color);
+  font-weight: 600;
+}
+
+.mini-day-cell.neutral {
+  background: hsla(var(--muted), 0.6);
+}
+
+.mini-day-cell.payout {
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.mini-day-cell.payout .mini-day-number {
+  color: rgb(167, 139, 250);
+}
+
+.mini-day-cell.today {
+  outline: 1.5px solid hsl(var(--primary));
+  outline-offset: -1px;
+}
+
+.mini-day-cell.today .mini-day-number {
+  color: hsl(var(--primary));
+  font-weight: 700;
+}
+
+/* Full mode MonthCard grid */
+.month-card-full-grid {
+  width: 100%;
+}
+
+.full-day-headers {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.full-day-header {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--primary));
+  text-transform: uppercase;
+  padding: 4px 0;
+}
+
+.full-calendar-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.full-calendar-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.full-day-cell.empty {
+  visibility: hidden;
+}
+
+/* ─── Risk Account Filter ────────────────────────────── */
+.risk-filter-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border) / 0.4);
+  background: hsl(var(--background) / 0.6);
+  backdrop-filter: blur(12px);
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.risk-filter-trigger:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 0 12px hsl(var(--primary) / 0.15);
+}
+
+.risk-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  border-radius: 10px;
+  border: 1px solid hsl(var(--border) / 0.4);
+  background: hsl(var(--background) / 0.85);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px hsl(var(--border) / 0.1);
+  padding: 4px;
+  overflow: hidden;
+}
+
+.risk-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--foreground) / 0.8);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.risk-filter-option:hover {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--foreground));
+}
+
+.risk-filter-option.active {
+  background: hsl(var(--primary) / 0.18);
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+
+/* ─── Back to Dashboard Navigation ───────────────────── */
+.back-to-dashboard {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  text-decoration: none;
+  transition: all 0.2s ease;
+  margin-bottom: 8px;
+}
+
+.back-to-dashboard:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--primary) / 0.08);
+  box-shadow: 0 0 12px hsl(var(--primary) / 0.1);
+}
