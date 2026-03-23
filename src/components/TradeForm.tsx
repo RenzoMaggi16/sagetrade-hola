@@ -18,6 +18,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AccountFormDialog } from "@/components/AccountFormDialog";
 import { useTradingPlan } from "@/hooks/useTradingPlan";
+import { EntryTypeManager } from "@/components/EntryTypeManager";
 
 
 // Lista de símbolos predefinidos
@@ -46,8 +47,7 @@ const emocionOptions = [
   { value: "Exceso de confianza", label: "Exceso de confianza" },
 ];
 
-// Opciones de Tipo de Entrada
-const ENTRY_TYPE_OPTIONS = ['IFVG', 'OB', 'NR', 'BOS', 'Sin setup'];
+// Entry types are now dynamic — managed by EntryTypeManager component
 
 interface TradeFormProps {
   tradeToEdit?: any; // Trade a editar (opcional)
@@ -736,44 +736,11 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
             </ToggleGroup>
           </div>
 
-          {/* Tipo de Entrada (Multi-select) */}
-          <div className="space-y-3 pt-4">
-            <Label className="font-semibold text-lg">Tipo de Entrada</Label>
-            <p className="text-xs text-muted-foreground">Podés seleccionar más de una opción</p>
-            <div className="flex flex-wrap gap-2">
-              {ENTRY_TYPE_OPTIONS.map((type) => {
-                const isSelected = selectedEntryTypes.includes(type);
-                const colorMap: Record<string, { active: string; inactive: string }> = {
-                  'IFVG': { active: 'bg-cyan-500 border-cyan-400 text-white', inactive: 'border-cyan-800 text-cyan-400 hover:bg-cyan-900/40' },
-                  'OB': { active: 'bg-violet-500 border-violet-400 text-white', inactive: 'border-violet-800 text-violet-400 hover:bg-violet-900/40' },
-                  'NR': { active: 'bg-amber-500 border-amber-400 text-white', inactive: 'border-amber-800 text-amber-400 hover:bg-amber-900/40' },
-                  'BOS': { active: 'bg-emerald-500 border-emerald-400 text-white', inactive: 'border-emerald-800 text-emerald-400 hover:bg-emerald-900/40' },
-                  'Sin setup': { active: 'bg-red-600 border-red-500 text-white', inactive: 'border-red-700 text-red-500 hover:bg-red-900/40' },
-                };
-                const colors = colorMap[type] || { active: 'bg-primary border-primary/80 text-primary-foreground', inactive: 'border-neutral-700 text-white hover:bg-neutral-800' };
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => {
-                      setSelectedEntryTypes(prev =>
-                        prev.includes(type)
-                          ? prev.filter(t => t !== type)
-                          : [...prev, type]
-                      );
-                    }}
-                    className={`px-4 py-2 rounded-md border text-sm font-semibold transition-all duration-150 ${
-                      isSelected
-                        ? `${colors.active} shadow-sm`
-                        : `bg-neutral-900 ${colors.inactive}`
-                    }`}
-                  >
-                    {type}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Tipo de Entrada (Dynamic Multi-select) */}
+          <EntryTypeManager
+            selectedTypes={selectedEntryTypes}
+            onSelectionChange={setSelectedEntryTypes}
+          />
 
           {/* Notas Pre y Post Trade */}
           <div className="space-y-4 pt-4 col-span-1 md:col-span-2"> {/* Ocupa todo el ancho */}

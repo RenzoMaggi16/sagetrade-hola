@@ -8,6 +8,7 @@ import { es } from "date-fns/locale";
 import { Eye, ArrowLeft, TrendingUp, TrendingDown, Minus, Clock, Target, Star, AlertTriangle, CheckCircle, Ban, XCircle, ImageIcon, Search, ZoomIn, ZoomOut } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { useEntryTypes } from "@/hooks/useEntryTypes";
 
 interface DayTradesModalProps {
   open: boolean;
@@ -86,13 +87,16 @@ export const DayTradesModal = ({ open, onOpenChange, date, accountTradeIds }: Da
 
   const totalPnL = trades.reduce((sum, t) => sum + Number(t.pnl_neto), 0);
 
-  // Entry type badge colors
-  const entryTypeColors: Record<string, string> = {
-    'IFVG': 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400',
-    'OB': 'bg-violet-500/15 border-violet-500/40 text-violet-400',
-    'NR': 'bg-amber-500/15 border-amber-500/40 text-amber-400',
-    'BOS': 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400',
-    'Sin setup': 'bg-red-600/20 border-red-500/50 text-red-500',
+  const { entryTypes: userEntryTypes } = useEntryTypes();
+
+  // Dynamic entry type colors
+  const getEntryTypeColor = (typeName: string) => {
+    const found = userEntryTypes.find((et) => et.name === typeName);
+    return found?.color || '#06b6d4';
+  };
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '6, 182, 212';
   };
 
   // ─── Trade Detail View ───
@@ -166,11 +170,24 @@ export const DayTradesModal = ({ open, onOpenChange, date, accountTradeIds }: Da
               <div>
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Tipo de Entrada</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {trade.entry_types.map((type) => (
-                    <Badge key={type} variant="outline" className={`px-2.5 py-0.5 text-xs font-semibold ${entryTypeColors[type] || 'bg-primary/10 border-primary/30 text-primary'}`}>
-                      {type}
-                    </Badge>
-                  ))}
+                  {trade.entry_types.map((type) => {
+                    const color = getEntryTypeColor(type);
+                    const rgb = hexToRgb(color);
+                    return (
+                      <Badge
+                        key={type}
+                        variant="outline"
+                        className="px-2.5 py-0.5 text-xs font-semibold"
+                        style={{
+                          backgroundColor: `rgba(${rgb}, 0.15)`,
+                          borderColor: `rgba(${rgb}, 0.4)`,
+                          color: color,
+                        }}
+                      >
+                        {type}
+                      </Badge>
+                    );
+                  })}
                 </div>
               </div>
             )}

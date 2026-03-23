@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TradeForm } from "@/components/TradeForm";
 import { Label } from "@/components/ui/label";
+import { useEntryTypes } from "@/hooks/useEntryTypes";
 
 interface Trade {
   id: string;
@@ -92,6 +93,17 @@ const TradeDetail = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
+  const { entryTypes: userEntryTypes } = useEntryTypes();
+
+  // Helper to get entry type color
+  const getEntryTypeColor = (typeName: string) => {
+    const found = userEntryTypes.find((et) => et.name === typeName);
+    return found?.color || '#06b6d4';
+  };
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '6, 182, 212';
+  };
 
   const fetchTradeDetails = async () => {
     if (!id) {
@@ -273,15 +285,19 @@ const TradeDetail = () => {
                 <h3 className="text-lg font-semibold mb-3">Tipo de Entrada</h3>
                 <div className="flex flex-wrap gap-2">
                   {trade.entry_types.map((type) => {
-                    const badgeColors: Record<string, string> = {
-                      'IFVG': 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400',
-                      'OB': 'bg-violet-500/15 border-violet-500/40 text-violet-400',
-                      'NR': 'bg-amber-500/15 border-amber-500/40 text-amber-400',
-                      'BOS': 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400',
-                      'Sin setup': 'bg-red-600/20 border-red-500/50 text-red-500',
-                    };
+                    const color = getEntryTypeColor(type);
+                    const rgb = hexToRgb(color);
                     return (
-                      <Badge key={type} variant="outline" className={`px-3 py-1 text-sm font-semibold ${badgeColors[type] || 'bg-primary/10 border-primary/30 text-primary'}`}>
+                      <Badge
+                        key={type}
+                        variant="outline"
+                        className="px-3 py-1 text-sm font-semibold"
+                        style={{
+                          backgroundColor: `rgba(${rgb}, 0.15)`,
+                          borderColor: `rgba(${rgb}, 0.4)`,
+                          color: color,
+                        }}
+                      >
                         {type}
                       </Badge>
                     );
