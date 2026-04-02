@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AccountFormDialog } from "@/components/AccountFormDialog";
 import { useTradingPlan } from "@/hooks/useTradingPlan";
 import { EntryTypeManager } from "@/components/EntryTypeManager";
+import { useAccountContext } from "@/context/AccountContext";
 
 
 // Lista de símbolos predefinidos
@@ -71,7 +72,8 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
 
   // Estados para cuentas
   const [accounts, setAccounts] = useState<any[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const { lastSpecificAccountId, setAccount } = useAccountContext();
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(lastSpecificAccountId);
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
 
   // Estado para evaluación de setup compliance
@@ -137,7 +139,9 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
 
       // Auto-select first account if not editing and no account selected
       if (!tradeToEdit && !selectedAccountId && data && data.length > 0) {
-        setSelectedAccountId(data[0].id);
+        const defaultId = lastSpecificAccountId || data[0].id;
+        setSelectedAccountId(defaultId);
+        setAccount(defaultId);
       }
     }
   };
@@ -216,7 +220,9 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
 
       // Auto-seleccionar cuenta si hay cuentas disponibles
       if (accounts.length > 0) {
-        setSelectedAccountId(accounts[0].id);
+        const defaultId = lastSpecificAccountId || accounts[0].id;
+        setSelectedAccountId(defaultId);
+        setAccount(defaultId);
       } else {
         setSelectedAccountId(null);
       }
@@ -517,7 +523,9 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
 
         // Mantener la cuenta seleccionada o seleccionar la primera
         if (accounts.length > 0) {
-          setSelectedAccountId(accounts[0].id);
+          const defaultId = lastSpecificAccountId || accounts[0].id;
+          setSelectedAccountId(defaultId);
+          setAccount(defaultId);
         } else {
           setSelectedAccountId(null);
         }
@@ -546,8 +554,11 @@ export const TradeForm = ({ tradeToEdit, onSaveSuccess }: TradeFormProps = {}) =
             <Label htmlFor="account-select">Cuenta *</Label>
             <div className="flex items-center gap-2">
               <Select
-                value={selectedAccountId}
-                onValueChange={(value) => setSelectedAccountId(value)}
+                value={selectedAccountId || ""}
+                onValueChange={(value) => {
+                  setSelectedAccountId(value);
+                  setAccount(value);
+                }}
                 required
               >
                 <SelectTrigger id="account-select" className="flex-grow">

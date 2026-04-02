@@ -41,6 +41,54 @@ export type Database = {
         }
         Relationships: []
       }
+      tradovate_connections: {
+        Row: {
+          id: string
+          user_id: string
+          access_token: string | null
+          token_expiry: string | null
+          tradovate_user_id: number | null
+          tradovate_environment: 'demo' | 'live'
+          accounts_cache: any[] | null
+          last_sync_at: string | null
+          last_sync_fill_id: number
+          status: 'connected' | 'disconnected' | 'error'
+          error_message: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          access_token?: string | null
+          token_expiry?: string | null
+          tradovate_user_id?: number | null
+          tradovate_environment?: 'demo' | 'live'
+          accounts_cache?: any[] | null
+          last_sync_at?: string | null
+          last_sync_fill_id?: number
+          status?: 'connected' | 'disconnected' | 'error'
+          error_message?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          access_token?: string | null
+          token_expiry?: string | null
+          tradovate_user_id?: number | null
+          tradovate_environment?: 'demo' | 'live'
+          accounts_cache?: any[] | null
+          last_sync_at?: string | null
+          last_sync_fill_id?: number
+          status?: 'connected' | 'disconnected' | 'error'
+          error_message?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       mentor_chat_messages: {
         Row: {
           id: string
@@ -111,6 +159,7 @@ export type Database = {
           consistency_withdrawal_pct: number | null
           evaluation_passed: boolean
           evaluation_passed_at: string | null
+          funding_firm_id: string | null
         }
         Insert: {
           id?: string
@@ -133,6 +182,7 @@ export type Database = {
           consistency_withdrawal_pct?: number | null
           evaluation_passed?: boolean
           evaluation_passed_at?: string | null
+          funding_firm_id?: string | null
         }
         Update: {
           id?: string
@@ -155,6 +205,7 @@ export type Database = {
           consistency_withdrawal_pct?: number | null
           evaluation_passed?: boolean
           evaluation_passed_at?: string | null
+          funding_firm_id?: string | null
         }
         Relationships: []
       }
@@ -211,6 +262,7 @@ export type Database = {
           trade_of_day_notes: string | null
           entry_types: string[] | null
           created_at: string | null
+          tradovate_fill_id: string | null
         }
         Insert: {
           id?: string
@@ -234,6 +286,7 @@ export type Database = {
           trade_of_day_notes?: string | null
           entry_types?: string[] | null
           created_at?: string | null
+          tradovate_fill_id?: string | null
         }
         Update: {
           id?: string
@@ -257,6 +310,7 @@ export type Database = {
           trade_of_day_notes?: string | null
           entry_types?: string[] | null
           created_at?: string | null
+          tradovate_fill_id?: string | null
         }
         Relationships: []
       }

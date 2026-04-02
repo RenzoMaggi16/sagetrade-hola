@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { FUNDING_FIRM_LIST, getFirmLabel, type FundingFirmId } from "@/utils/firmConfig";
 
 interface AccountFormDialogProps {
   isOpen: boolean;
@@ -17,7 +19,14 @@ export function AccountFormDialog({ isOpen, onOpenChange, onSaveSuccess }: Accou
   const [saving, setSaving] = useState(false);
   const [accountName, setAccountName] = useState("");
   const [assetClass, setAssetClass] = useState<'futures' | 'forex' | 'crypto' | 'stocks' | 'other'>("futures");
+  const [accountType, setAccountType] = useState<'personal' | 'evaluation' | 'live'>("personal");
+  const [fundingFirmId, setFundingFirmId] = useState<FundingFirmId | "">("");
   const [initialCapital, setInitialCapital] = useState<number>(0);
+
+  // Determine if the funding firm dropdown should be visible
+  const showFirmDropdown =
+    (accountType === 'live' && assetClass === 'futures') ||
+    accountType === 'evaluation';
 
   const handleCreate = async () => {
     try {
@@ -37,16 +46,28 @@ export function AccountFormDialog({ isOpen, onOpenChange, onSaveSuccess }: Accou
         return;
       }
 
+      // Validation: firm required for live+futures and evaluation
+      if (showFirmDropdown && !fundingFirmId) {
+        toast.error("Selecciona una empresa de fondeo");
+        return;
+      }
+
+      // Resolve funding_company from firm selection
+      const resolvedFundingCompany = fundingFirmId
+        ? getFirmLabel(fundingFirmId)
+        : null;
+
       const { data, error } = await supabase
         .from('accounts')
         .insert({
           user_id: user.id,
           account_name: accountName.trim(),
-          account_type: 'personal',
+          account_type: accountType,
           asset_class: assetClass,
           initial_capital: initialCapital,
           current_capital: initialCapital,
-          funding_company: null,
+          funding_company: accountType !== 'personal' ? resolvedFundingCompany : null,
+          funding_firm_id: accountType !== 'personal' ? (fundingFirmId || null) : null,
           funding_target_1: null,
           funding_target_2: null,
           funding_phases: null,
@@ -59,9 +80,12 @@ export function AccountFormDialog({ isOpen, onOpenChange, onSaveSuccess }: Accou
       toast.success("Cuenta creada correctamente");
       onSaveSuccess?.(data || undefined);
       onOpenChange(false);
+      // Reset
       setAccountName("");
       setInitialCapital(0);
       setAssetClass('futures');
+      setAccountType('personal');
+      setFundingFirmId("");
     } catch (e: any) {
       console.error(e);
       toast.error("Error al crear la cuenta");
@@ -72,21 +96,31 @@ export function AccountFormDialog({ isOpen, onOpenChange, onSaveSuccess }: Accou
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nueva Cuenta</DialogTitle>
           <DialogDescription>Crea rápidamente una cuenta para registrar tu operación.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-2">
+          {/* Account Name */}
           <div className="grid gap-2">
             <Label htmlFor="account_name_quick">Nombre de la Cuenta *</Label>
             <Input id="account_name_quick" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Ej: Cuenta Rápida" />
           </div>
+
+          {/* Step 1: Market Selection */}
           <div className="grid gap-2">
-            <Label htmlFor="asset_class_quick">Clase de Activo *</Label>
-            <Select value={assetClass} onValueChange={(v) => setAssetClass(v as any)}>
+            <Label htmlFor="asset_class_quick">Mercado *</Label>
+            <Select
+              value={assetClass}
+              onValueChange={(v) => {
+                setAssetClass(v as any);
+                // Reset firm if not futures
+                if (v !== 'futures') setFundingFirmId("");
+              }}
+            >
               <SelectTrigger id="asset_class_quick">
-                <SelectValue placeholder="Selecciona clase de activo" />
+                <SelectValue placeholder="Selecciona mercado" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="futures">Futuros</SelectItem>
@@ -97,6 +131,56 @@ export function AccountFormDialog({ isOpen, onOpenChange, onSaveSuccess }: Accou
               </SelectContent>
             </Select>
           </div>
+
+          {/* Step 2: Account Category */}
+          <div className="grid gap-2">
+            <Label>Categoría de Cuenta *</Label>
+            <RadioGroup
+              value={accountType}
+              onValueChange={(v: "personal" | "evaluation" | "live") => {
+                setAccountType(v);
+                if (v === 'personal') setFundingFirmId("");
+              }}
+              className="flex flex-wrap gap-2 sm:gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="evaluation" id="eval_quick" />
+                <Label htmlFor="eval_quick">Evaluación</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="live" id="live_quick" />
+                <Label htmlFor="live_quick">Fondeada (Live)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="personal" id="personal_quick" />
+                <Label htmlFor="personal_quick">Personal</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          {/* Step 3: Conditional Funding Firm */}
+          {showFirmDropdown && (
+            <div className="grid gap-2">
+              <Label htmlFor="funding_firm_quick">Empresa de Fondeo *</Label>
+              <Select
+                value={fundingFirmId}
+                onValueChange={(v) => setFundingFirmId(v as FundingFirmId)}
+              >
+                <SelectTrigger id="funding_firm_quick">
+                  <SelectValue placeholder="Selecciona empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FUNDING_FIRM_LIST.map((firm) => (
+                    <SelectItem key={firm.id} value={firm.id}>
+                      {firm.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Capital Inicial */}
           <div className="grid gap-2">
             <Label htmlFor="initial_capital_quick">Capital Inicial *</Label>
             <Input id="initial_capital_quick" type="number" min="0" step="0.01" value={initialCapital} onChange={(e) => setInitialCapital(parseFloat(e.target.value) || 0)} placeholder="0.00" />
@@ -112,5 +196,3 @@ export function AccountFormDialog({ isOpen, onOpenChange, onSaveSuccess }: Accou
 }
 
 export default AccountFormDialog;
-
-

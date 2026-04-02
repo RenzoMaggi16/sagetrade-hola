@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, Wallet, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { FUNDING_FIRM_LIST, getFirmLabel, type FundingFirmId } from "@/utils/firmConfig";
 
 // Usar tipos de Supabase
 type Account = Tables<'accounts'>;
@@ -23,6 +24,7 @@ interface FormData {
   asset_class: 'futures' | 'forex' | 'crypto' | 'stocks' | 'other';
   initial_capital: number;
   funding_company: string;
+  funding_firm_id: FundingFirmId | '';
   funding_phases: number; // 1 o 2 para evaluación
   funding_target_1: number; // objetivo fase 1
   funding_target_2: number; // objetivo fase 2 (opcional)
@@ -45,6 +47,7 @@ const ManageAccounts = () => {
     asset_class: 'futures',
     initial_capital: 0,
     funding_company: '',
+    funding_firm_id: '',
     funding_phases: 1,
     funding_target_1: 0,
     funding_target_2: 0,
@@ -99,6 +102,7 @@ const ManageAccounts = () => {
       asset_class: 'futures',
       initial_capital: 0,
       funding_company: '',
+      funding_firm_id: '',
       funding_phases: 1,
       funding_target_1: 0,
       funding_target_2: 0,
@@ -116,10 +120,11 @@ const ManageAccounts = () => {
       setEditingAccount(account);
       setFormData({
         account_name: account.account_name,
-        account_type: account.account_type, // Usar el valor directamente sin mapeo
+        account_type: account.account_type,
         asset_class: account.asset_class,
         initial_capital: account.initial_capital,
         funding_company: account.funding_company || '',
+        funding_firm_id: (account as any).funding_firm_id || '',
         funding_phases: account.funding_phases || 1,
         funding_target_1: account.funding_target_1 || 0,
         funding_target_2: account.funding_target_2 || 0,
@@ -158,8 +163,8 @@ const ManageAccounts = () => {
       }
 
       if (formData.account_type === 'evaluation') {
-        if (!formData.funding_company.trim()) {
-          toast.error("La empresa de funding es requerida para Evaluación");
+        if (!formData.funding_firm_id && !formData.funding_company.trim()) {
+          toast.error("Selecciona una empresa de fondeo para Evaluación");
           return;
         }
         if (formData.funding_phases !== 1 && formData.funding_phases !== 2) {
@@ -177,7 +182,11 @@ const ManageAccounts = () => {
       }
 
       if (formData.account_type === 'live') {
-        if (!formData.funding_company.trim()) {
+        if (formData.asset_class === 'futures' && !formData.funding_firm_id) {
+          toast.error("Selecciona una empresa de fondeo");
+          return;
+        }
+        if (formData.asset_class !== 'futures' && !formData.funding_company.trim()) {
           toast.error("La empresa de funding es requerida para Live");
           return;
         }
@@ -189,6 +198,11 @@ const ManageAccounts = () => {
         return;
       }
 
+      // Compute funding_company from firm selection if applicable
+      const resolvedFundingCompany = formData.funding_firm_id
+        ? getFirmLabel(formData.funding_firm_id as FundingFirmId)
+        : formData.funding_company.trim() || null;
+
       // Datos comunes del formulario (sin user_id)
       const formFields = {
         account_name: formData.account_name.trim(),
@@ -196,7 +210,10 @@ const ManageAccounts = () => {
         asset_class: formData.asset_class,
         initial_capital: formData.initial_capital,
         funding_company: formData.account_type !== 'personal'
-          ? formData.funding_company.trim() || null
+          ? resolvedFundingCompany
+          : null,
+        funding_firm_id: formData.account_type !== 'personal'
+          ? (formData.funding_firm_id || null)
           : null,
         funding_target_1: formData.account_type === 'evaluation'
           ? (formData.funding_target_1 || null)
@@ -378,6 +395,7 @@ const ManageAccounts = () => {
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
+              {/* Step 1: Account Name */}
               <div className="grid gap-2">
                 <Label htmlFor="account_name">Nombre de la Cuenta *</Label>
                 <Input
@@ -388,51 +406,22 @@ const ManageAccounts = () => {
                 />
               </div>
 
+              {/* Step 2: Market Selection (Asset Class) */}
               <div className="grid gap-2">
-                <Label>Tipo de Cuenta *</Label>
-                <RadioGroup
-                  value={formData.account_type}
-                  onValueChange={(value: "personal" | "evaluation" | "live") => {
-                    const validValue = value || "personal";
-                    setFormData(prev => ({
-                      ...prev,
-                      account_type: validValue,
-                      // Limpiar campos si se selecciona 'personal'
-                      ...(validValue === 'personal' && {
-                        funding_company: '',
-                        funding_phases: 1,
-                        funding_target_1: 0,
-                        funding_target_2: 0
-                      })
-                    }));
-                  }}
-                  className="flex flex-wrap gap-2 sm:gap-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="personal" id="personal" />
-                    <Label htmlFor="personal">Personal</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="evaluation" id="evaluation" />
-                    <Label htmlFor="evaluation">Evaluación (Prueba)</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="live" id="live" />
-                    <Label htmlFor="live">Fondeada (Live)</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="asset_class">Clase de Activo *</Label>
+                <Label htmlFor="asset_class">Mercado *</Label>
                 <Select
                   value={formData.asset_class}
                   onValueChange={(value: 'futures' | 'forex' | 'crypto' | 'stocks' | 'other') =>
-                    setFormData({ ...formData, asset_class: value })
+                    setFormData(prev => ({
+                      ...prev,
+                      asset_class: value,
+                      // Reset firm if changing away from futures
+                      ...(value !== 'futures' && { funding_firm_id: '' as const })
+                    }))
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecciona una clase de activo" />
+                    <SelectValue placeholder="Selecciona un mercado" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="futures">Futuros</SelectItem>
@@ -444,6 +433,92 @@ const ManageAccounts = () => {
                 </Select>
               </div>
 
+              {/* Step 3: Account Category */}
+              <div className="grid gap-2">
+                <Label>Categoría de Cuenta *</Label>
+                <RadioGroup
+                  value={formData.account_type}
+                  onValueChange={(value: "personal" | "evaluation" | "live") => {
+                    const validValue = value || "personal";
+                    setFormData(prev => ({
+                      ...prev,
+                      account_type: validValue,
+                      // Reset fields based on selection
+                      ...(validValue === 'personal' && {
+                        funding_company: '',
+                        funding_firm_id: '' as const,
+                        funding_phases: 1,
+                        funding_target_1: 0,
+                        funding_target_2: 0,
+                        has_consistency: false,
+                      }),
+                      ...(validValue === 'evaluation' && {
+                        has_consistency: false,
+                      }),
+                    }));
+                  }}
+                  className="flex flex-wrap gap-2 sm:gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="evaluation" id="evaluation" />
+                    <Label htmlFor="evaluation">Evaluación (Prueba)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="live" id="live" />
+                    <Label htmlFor="live">Fondeada (Live)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="personal" id="personal" />
+                    <Label htmlFor="personal">Personal</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {/* Step 4: Conditional Funding Firm Selection */}
+              {/* Show for: Live+Futures, Evaluation (any market) */}
+              {((formData.account_type === 'live' && formData.asset_class === 'futures') ||
+                formData.account_type === 'evaluation') && (
+                <div className="grid gap-2">
+                  <Label htmlFor="funding_firm">Empresa de Fondeo *</Label>
+                  <Select
+                    value={formData.funding_firm_id}
+                    onValueChange={(value) => {
+                      const firm = FUNDING_FIRM_LIST.find(f => f.id === value);
+                      setFormData(prev => ({
+                        ...prev,
+                        funding_firm_id: value as FundingFirmId,
+                        funding_company: firm ? firm.label : '',
+                      }));
+                    }}
+                  >
+                    <SelectTrigger id="funding_firm">
+                      <SelectValue placeholder="Selecciona empresa de fondeo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FUNDING_FIRM_LIST.map((firm) => (
+                        <SelectItem key={firm.id} value={firm.id}>
+                          {firm.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* For Live accounts on non-futures markets, show free-text firm input */}
+              {formData.account_type === 'live' && formData.asset_class !== 'futures' && (
+                <div className="grid gap-2">
+                  <Label htmlFor="funding_company">Empresa de Fondeo *</Label>
+                  <Input
+                    id="funding_company"
+                    value={formData.funding_company}
+                    onChange={(e) => setFormData({ ...formData, funding_company: e.target.value })}
+                    placeholder="Ej: Nombre de la empresa"
+                  />
+                </div>
+              )}
+
+              {/* Capital Inicial */}
               <div className="grid gap-2">
                 <Label htmlFor="initial_capital">Capital Inicial *</Label>
                 <Input
@@ -456,18 +531,6 @@ const ManageAccounts = () => {
                   placeholder="0.00"
                 />
               </div>
-
-              {(formData.account_type === 'evaluation' || formData.account_type === 'live') && (
-                <div className="grid gap-2">
-                  <Label htmlFor="funding_company">Empresa de Fondeo *</Label>
-                  <Input
-                    id="funding_company"
-                    value={formData.funding_company}
-                    onChange={(e) => setFormData({ ...formData, funding_company: e.target.value })}
-                    placeholder="Ej: Apex, Topstep"
-                  />
-                </div>
-              )}
 
               {formData.account_type === 'evaluation' && (
                 <>

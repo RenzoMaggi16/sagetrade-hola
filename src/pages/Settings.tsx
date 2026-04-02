@@ -4,12 +4,14 @@ import { BackToDashboard } from '@/components/BackToDashboard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Settings as SettingsIcon, Check, Moon, Sun, Zap } from "lucide-react";
+import { Settings as SettingsIcon, Check, Moon, Sun, Zap, Link2 } from "lucide-react";
 
 import ManageAccounts from './ManageAccounts';
 import { useColors, THEMES, ThemeType } from '@/context/ColorProvider';
 import { cn } from "@/lib/utils";
+import { TradovateIntegration } from '@/components/TradovateIntegration';
 
 const Settings = () => {
   const { currentTheme, setTheme, isLoading } = useColors();
@@ -136,6 +138,24 @@ const Settings = () => {
             </AccordionTrigger>
             <AccordionContent>
               <ManageAccounts />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Item 3: Tradovate Integration */}
+          <AccordionItem value="item-3">
+            <AccordionTrigger className="text-xl font-medium">
+              <span className="flex items-center gap-2">
+                <Link2 className="h-5 w-5" />
+                Conexión con Broker (Tradovate)
+                <Badge variant="outline" className="ml-2 text-xs font-normal border-amber-500/30 text-amber-500 bg-amber-500/10">
+                  En desarrollo
+                </Badge>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="pt-4">
+                <TradovateIntegration />
+              </div>
             </AccordionContent>
           </AccordionItem>
         </Accordion>

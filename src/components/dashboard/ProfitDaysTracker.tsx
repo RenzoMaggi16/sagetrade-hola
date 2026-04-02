@@ -13,9 +13,18 @@ interface ProfitDaysTrackerProps {
   withdrawalPct: number;
   initialCapital: number;
   currentBalance: number;
+  /** Minimum $ profit for a day to count as a "Profit Day". Defaults to 0 (any profit). */
+  minProfitThreshold?: number;
 }
 
-export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct, initialCapital, currentBalance }: ProfitDaysTrackerProps) => {
+export const ProfitDaysTracker = ({
+  trades,
+  minProfitDays,
+  withdrawalPct,
+  initialCapital,
+  currentBalance,
+  minProfitThreshold = 0,
+}: ProfitDaysTrackerProps) => {
   const { profitDays, totalDays, isCompleted } = useMemo(() => {
     // Group trades by date, sum PnL per day
     const dailyPnL = new Map<string, number>();
@@ -26,10 +35,18 @@ export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct, initia
       dailyPnL.set(dateStr, (dailyPnL.get(dateStr) || 0) + Number(trade.pnl_neto ?? 0));
     });
 
-    // Count total days where net PnL > 0
+    // BUG FIX: Count total days where net PnL >= firm-specific threshold
+    // Previously: if (pnl > 0) — always counted $1+ as profit
+    // Now: if (pnl >= minProfitThreshold) — uses firm-specific minimum
     let totalProfitDays = 0;
     dailyPnL.forEach((pnl) => {
-      if (pnl > 0) totalProfitDays++;
+      if (minProfitThreshold > 0) {
+        // Firm-specific: must meet or exceed threshold
+        if (pnl >= minProfitThreshold) totalProfitDays++;
+      } else {
+        // Default (personal/other): any positive profit counts
+        if (pnl > 0) totalProfitDays++;
+      }
     });
 
     return {
@@ -37,11 +54,16 @@ export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct, initia
       totalDays: dailyPnL.size,
       isCompleted: totalProfitDays >= minProfitDays,
     };
-  }, [trades, minProfitDays]);
+  }, [trades, minProfitDays, minProfitThreshold]);
 
   const progressPct = Math.min(100, (profitDays / minProfitDays) * 100);
   const withdrawableProfit = Math.max(0, currentBalance - initialCapital);
   const nextWithdrawalEstimate = withdrawableProfit * (withdrawalPct / 100);
+
+  // Format threshold for display
+  const thresholdLabel = minProfitThreshold > 0
+    ? `≥ $${minProfitThreshold}`
+    : '> $0';
 
   return (
     <Card className={`border-l-4 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md ${isCompleted ? 'border-l-emerald-500' : 'border-l-sky-500'}`}>
@@ -71,6 +93,14 @@ export const ProfitDaysTracker = ({ trades, minProfitDays, withdrawalPct, initia
             </span>
             <span className="text-sm text-muted-foreground font-medium">/ {minProfitDays}</span>
           </div>
+        </div>
+
+        {/* Threshold Info */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Mínimo por día</span>
+          <span className="text-xs font-semibold text-amber-400/90 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+            {thresholdLabel}
+          </span>
         </div>
 
         {/* Progress Bar */}

@@ -22,6 +22,8 @@ import { DailyPsychologyQuote } from "@/components/dashboard/DailyPsychologyQuot
 import { RiskAccountCard } from "@/components/dashboard/RiskAccountCard";
 import { ProfitDaysTracker } from "@/components/dashboard/ProfitDaysTracker";
 import { DayTradesModal } from "@/components/dashboard/DayTradesModal";
+import { useAccountContext } from "@/context/AccountContext";
+import { getProfitThreshold } from "@/utils/firmConfig";
 import { format, isSameDay, parseISO, getDay, startOfWeek, endOfWeek, isWithinInterval, eachDayOfInterval, subDays, startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
@@ -54,18 +56,11 @@ interface Account {
   consistency_withdrawal_pct?: number | null;
   evaluation_passed?: boolean;
   evaluation_passed_at?: string | null;
+  funding_firm_id?: string | null;
 }
 
 export const Dashboard = () => {
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(() => {
-    return localStorage.getItem('dashboard-selected-account') || null;
-  });
-
-  useEffect(() => {
-    if (selectedAccountId) {
-      localStorage.setItem('dashboard-selected-account', selectedAccountId);
-    }
-  }, [selectedAccountId]);
+  const { globalAccountId: selectedAccountId, setAccount: setSelectedAccountId } = useAccountContext();
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>(() => {
     const saved = localStorage.getItem('calendar-display-mode');
@@ -96,7 +91,7 @@ export const Dashboard = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, highest_balance, profit_target, funding_target_1, consistency_min_profit_days, consistency_withdrawal_pct, evaluation_passed, evaluation_passed_at')
+        .select('id, account_name, account_type, initial_capital, current_capital, drawdown_type, drawdown_amount, highest_balance, profit_target, funding_target_1, consistency_min_profit_days, consistency_withdrawal_pct, evaluation_passed, evaluation_passed_at, funding_firm_id')
         .order('created_at', { ascending: true }); // Oldest first = "First Created"
 
       if (error) throw error;
@@ -420,18 +415,18 @@ export const Dashboard = () => {
     // For passed accounts, filter to only post-pass trades
     const effectiveTrades = selectedAccountId === 'all'
       ? sortedAllTrades.filter(t => {
-          const acc = accounts.find(a => a.id === t.account_id);
-          if (acc?.evaluation_passed_at) {
-            return new Date(t.entry_time).getTime() > new Date(acc.evaluation_passed_at).getTime();
-          }
-          return true;
-        })
+        const acc = accounts.find(a => a.id === t.account_id);
+        if (acc?.evaluation_passed_at) {
+          return new Date(t.entry_time).getTime() > new Date(acc.evaluation_passed_at).getTime();
+        }
+        return true;
+      })
       : (() => {
-          const passedAt = accounts.find(a => a.id === selectedAccountId)?.evaluation_passed_at;
-          return passedAt
-            ? sortedAllTrades.filter(t => new Date(t.entry_time).getTime() > new Date(passedAt).getTime())
-            : sortedAllTrades;
-        })();
+        const passedAt = accounts.find(a => a.id === selectedAccountId)?.evaluation_passed_at;
+        return passedAt
+          ? sortedAllTrades.filter(t => new Date(t.entry_time).getTime() > new Date(passedAt).getTime())
+          : sortedAllTrades;
+      })();
 
     let startBalance = initialCapital;
     let filteredCurveTrades = effectiveTrades;
@@ -467,7 +462,7 @@ export const Dashboard = () => {
         const passedAt = acc.evaluation_passed_at;
         const accTrades = sortedAllTrades.filter(t => t.account_id === acc.id);
         const accPayouts = payouts.filter(p => p.account_id === acc.id).reduce((s, p) => s + Number(p.amount), 0);
-        
+
         if (passedAt) {
           const accEffectivePnL = accTrades.filter(t => new Date(t.entry_time).getTime() > new Date(passedAt).getTime()).reduce((s, t) => s + Number(t.pnl_neto), 0);
           return sum + accEffectivePnL;
@@ -678,6 +673,7 @@ export const Dashboard = () => {
                     withdrawalPct={acc.consistency_withdrawal_pct || 100}
                     initialCapital={acc.initial_capital}
                     currentBalance={riskData?.balance ?? currentBalance}
+                    minProfitThreshold={getProfitThreshold(acc.funding_firm_id, acc.account_type)}
                   />
                 );
               })()}
@@ -871,10 +867,10 @@ export const Dashboard = () => {
           />
         </div>
         {(() => {
-          const displayInitialCapital = selectedAccountId === 'all' 
+          const displayInitialCapital = selectedAccountId === 'all'
             ? (accounts.length > 0 ? Math.max(...accounts.map(a => a.initial_capital || 0)) : 0)
             : (accounts.find(a => a.id === selectedAccountId)?.initial_capital || 0);
-            
+
           return (
             <StatCard
               title="Balance"

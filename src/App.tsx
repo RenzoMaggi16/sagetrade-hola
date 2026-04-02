@@ -19,6 +19,7 @@ import TradesPage from "./pages/TradesPage";
 import { ThemeProvider } from "./context/ThemeProvider";
 import { ColorProvider } from "./context/ColorProvider";
 import { SmoothScrollProvider } from "./components/SmoothScrollProvider";
+import { AccountProvider } from "./context/AccountContext";
 
 const queryClient = new QueryClient();
 
@@ -27,7 +28,8 @@ const App = () => (
     <ColorProvider>
       <SmoothScrollProvider>
         <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
+          <AccountProvider>
+            <TooltipProvider>
             <Toaster />
             <Sonner />
             <BrowserRouter>
@@ -47,7 +49,8 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
-          </TooltipProvider>
+            </TooltipProvider>
+          </AccountProvider>
         </QueryClientProvider>
       </SmoothScrollProvider>
     </ColorProvider>
